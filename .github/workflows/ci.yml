@@ -37,7 +37,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org/'
           scope: '@devshop'
       - name: Install semantic-release
-        run: npm install --no-save semantic-release@^24 @semantic-release/changelog@^6 @semantic-release/git@^10
+        run: npm install --no-save semantic-release@^24
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
