@@ -17,7 +17,16 @@ pnpm add -D @devshop/crew
 pnpm exec crew init
 ```
 
-To pull newer skill content later, just run `pnpm exec crew update` — it auto-detects the package manager (pnpm/npm/yarn/bun) from your lockfile, runs `<pm> update @devshop/crew` to refresh the local install, then re-execs the freshly-installed CLI to apply the new skills. Pass `--no-self-update` to skip the package bump and only re-apply what's already on disk.
+To pull newer skill content later, run `pnpm exec crew update`. The flow:
+
+1. Auto-detects the package manager (pnpm / npm / yarn / bun) from your lockfile and runs `<pm> update @devshop/crew --latest` to bump the package.
+2. Re-execs the freshly-installed CLI.
+3. Computes the diff and prints a plan: which skills will be added, updated, replaced (had local edits), or removed (no longer in the package).
+4. Prompts `Apply these changes? [Y/n]`. Default Y. Press `n` to abort with no writes.
+5. Prompts `Back up current versions to .bak/<utc>/? [y/N]`. Default N. Press `y` to keep a snapshot of the pre-change state.
+6. Applies the changes — including removing skills the package no longer ships.
+
+`--yes` makes it non-interactive and CI-safe (auto-applies, defaults backup to Y to protect against accidentally clobbering edits in CI). `--force` is destructive: auto-applies and skips backup. `--dry-run` shows the plan without writing. `--no-self-update` skips step 1 (only re-applies what's already on disk from the existing local install).
 
 This copies the skills into `./.claude/skills/`, writes a manifest, and appends a `## Workflow Config` block to `CLAUDE.md` (creating it if absent).
 

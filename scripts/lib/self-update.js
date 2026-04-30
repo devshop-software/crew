@@ -39,10 +39,10 @@ function isLocalDep(projectRoot) {
 }
 
 const UPDATE_ARGS = {
-  pnpm: ['update', PACKAGE_NAME],
-  npm: ['update', PACKAGE_NAME],
-  yarn: ['upgrade', PACKAGE_NAME],
-  bun: ['update', PACKAGE_NAME]
+  pnpm: ['update', PACKAGE_NAME, '--latest'],
+  npm: ['install', `${PACKAGE_NAME}@latest`],
+  yarn: ['upgrade', PACKAGE_NAME, '--latest'],
+  bun: ['update', PACKAGE_NAME, '--latest']
 };
 
 // Returns one of:

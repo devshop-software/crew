@@ -1,8 +1,9 @@
 const path = require('path');
+const fs = require('fs');
 const { resolveTarget } = require('../lib/paths');
 const { readManifest, writeManifest, diffSkills, PACKAGE_NAME, SCHEMA_VERSION } = require('../lib/manifest');
-const { copyFolder, backupFolder, backupRoot } = require('../lib/fsx');
-const { chooseEditAction } = require('../lib/prompt');
+const { copyFolder, backupFolder, removeFolder, backupRoot } = require('../lib/fsx');
+const { Prompter } = require('../lib/prompt');
 const { runSelfUpdate } = require('../lib/self-update');
 const log = require('../lib/log');
 
@@ -11,9 +12,8 @@ const PKG_VERSION = require(path.join(PKG_ROOT, 'package.json')).version;
 const PKG_SKILLS = path.join(PKG_ROOT, 'skills');
 
 module.exports = async function update(flags) {
-  // If installed as a local dep, bump the package via the project's package
-  // manager first, then re-exec the freshly-installed CLI to do the actual
-  // skill update. Skipped for global/dlx invocations (no project lockfile).
+  // Self-update via the project's PM (pnpm/npm/yarn/bun) with --latest, then
+  // re-exec the freshly-installed CLI to do the real work.
   const self = runSelfUpdate(flags, log);
   if (self.error) { log.error(self.message); return self.exitCode; }
   if (self.reExec) return self.exitCode;
@@ -33,67 +33,124 @@ module.exports = async function update(flags) {
 
   const manifestVersionBefore = manifest.package_version;
   const diff = diffSkills(PKG_SKILLS, skillsDir, manifest);
-  let bakBase = null;
-  let refused = false;
-  let ioError = false;
-  const now = new Date().toISOString();
-  const interactive = process.stdin.isTTY || process.env.CREW_FAKE_TTY === '1';
-  const stamp = (name, hash) => { manifest.skills[name] = { version: PKG_VERSION, hash, installed_at: now }; };
-  const stats = { added: 0, updated: 0, keptEdited: 0, droppedFromPackage: 0, unchanged: 0 };
 
+  // Categorize per-skill changes the user needs to consent to.
+  // - add:     missing on disk, present in package
+  // - update:  on disk + matches manifest, but package hash differs
+  // - replace: on disk, edited (manifest hash != disk hash) — about to clobber edits
+  // - remove:  in manifest + on disk, package no longer ships it
+  // managed-unchanged with matching hash → no-op (excluded)
+  // foreign with inPkg → leave per spec (excluded)
+  // foreign without inPkg → user's own folder, ignore (excluded)
+  const changes = [];
   for (const s of diff) {
-    // Skill in manifest+disk but no longer in the package — keep it but tell the user.
     if (!s.inPkg && s.inDisk && s.mfHash) {
-      log.warn(`kept (no longer in package): ${s.name}`);
-      stats.droppedFromPackage++;
-      continue;
+      changes.push({ name: s.name, kind: 'remove' });
+    } else if (s.inPkg && s.state === 'missing') {
+      changes.push({ name: s.name, kind: 'add', pkgHash: s.pkgHash });
+    } else if (s.inPkg && s.state === 'managed-unchanged' && s.diskHash !== s.pkgHash) {
+      changes.push({ name: s.name, kind: 'update', pkgHash: s.pkgHash });
+    } else if (s.inPkg && s.state === 'managed-edited') {
+      changes.push({ name: s.name, kind: 'replace', pkgHash: s.pkgHash, edited: true });
     }
-    if (!s.inPkg) continue;
+  }
+
+  // Header
+  if (manifestVersionBefore && manifestVersionBefore !== PKG_VERSION) {
+    log.plain(`${PACKAGE_NAME}: ${manifestVersionBefore} → ${PKG_VERSION}`);
+  } else {
+    log.plain(`${PACKAGE_NAME}: ${PKG_VERSION}`);
+  }
+
+  if (changes.length === 0) {
+    log.plain('all up to date.');
+    if (!flags.dryRun && manifestVersionBefore !== PKG_VERSION) {
+      manifest.package_version = PKG_VERSION;
+      manifest.updated_at = new Date().toISOString();
+      try { writeManifest(skillsDir, manifest); }
+      catch (e) { log.error(`Failed writing manifest: ${e.message}`); return 3; }
+    }
+    return 0;
+  }
+
+  // Show plan
+  log.plain('');
+  log.plain('The following skills will change:');
+  const labelFor = (c) => {
+    if (c.kind === 'add') return 'add';
+    if (c.kind === 'update') return 'update';
+    if (c.kind === 'replace') return c.edited ? 'replace (you have local edits)' : 'replace';
+    if (c.kind === 'remove') return 'remove (no longer in package)';
+    return c.kind;
+  };
+  const w = Math.max(...changes.map(c => c.name.length));
+  for (const c of changes) log.plain(`  - ${c.name.padEnd(w)}  ${labelFor(c)}`);
+  log.plain('');
+
+  const interactive = process.stdin.isTTY || process.env.CREW_FAKE_TTY === '1';
+
+  // Single Prompter shared across the apply + backup prompts so we don't
+  // create/close a readline between them (which can drop buffered stdin).
+  const prompter = (interactive && !flags.force && !flags.yes) ? new Prompter() : null;
+  let apply;
+  let doBackup;
+  try {
+    if (flags.force || flags.yes) {
+      apply = true;
+    } else if (!interactive) {
+      log.error('Cannot prompt: stdin is not a TTY. Re-run with --yes or --force.');
+      return 1;
+    } else {
+      apply = await prompter.confirm('Apply these changes?', true);
+    }
+    if (!apply) {
+      log.plain('Aborted.');
+      return 1;
+    }
+    // Backup prompt — interactive default N (per the new flow).
+    // --yes is CI-safe → backup edits defensively. --force is destructive → no backup.
+    if (flags.force) doBackup = false;
+    else if (flags.yes) doBackup = true;
+    else doBackup = await prompter.confirm('Back up current versions to .bak/<utc>/?', false);
+  } finally {
+    if (prompter) prompter.close();
+  }
+
+  // Apply
+  const now = new Date().toISOString();
+  const stamp = (name, hash) => { manifest.skills[name] = { version: PKG_VERSION, hash, installed_at: now }; };
+  let bakBase = null;
+  let ioError = false;
+
+  for (const c of changes) {
     try {
-      if (s.state === 'missing') {
-        if (flags.dryRun) log.dryRun('copy', s.name);
-        else { copyFolder(path.join(PKG_SKILLS, s.name), path.join(skillsDir, s.name)); log.action('copy', s.name); }
-        stamp(s.name, s.pkgHash);
-        stats.added++;
-      } else if (s.state === 'managed-unchanged') {
-        if (s.diskHash !== s.pkgHash) {
-          if (flags.dryRun) log.dryRun('replace', s.name);
-          else { copyFolder(path.join(PKG_SKILLS, s.name), path.join(skillsDir, s.name)); log.action('replace', s.name); }
-          stamp(s.name, s.pkgHash);
-          stats.updated++;
-        } else {
-          stats.unchanged++;
-        }
-      } else if (s.state === 'managed-edited') {
-        let action;
-        if (flags.force) action = 'replace';
-        else if (flags.yes) action = 'backup';
-        else if (!interactive) {
-          log.error(`Edited skill detected ('${s.name}') and stdin is not a TTY. Re-run with --yes or --force.`);
-          refused = true;
-          continue;
-        } else {
-          action = await chooseEditAction(s.name);
-        }
-        if (action === 'keep') {
-          if (flags.dryRun) log.dryRun('keep', s.name);
-          else log.action('keep', s.name);
-          stats.keptEdited++;
-          continue;
-        }
-        if (action === 'backup') {
-          bakBase = bakBase || backupRoot(skillsDir);
-          if (flags.dryRun) log.dryRun('backup', s.name);
-          else { backupFolder(path.join(skillsDir, s.name), bakBase); log.action('backup', s.name); }
-        }
-        if (flags.dryRun) log.dryRun('replace', s.name);
-        else { copyFolder(path.join(PKG_SKILLS, s.name), path.join(skillsDir, s.name)); log.action('replace', s.name); }
-        stamp(s.name, s.pkgHash);
-        stats.updated++;
+      const live = path.join(skillsDir, c.name);
+      const src = path.join(PKG_SKILLS, c.name);
+
+      if (doBackup && (c.kind === 'update' || c.kind === 'replace' || c.kind === 'remove')) {
+        bakBase = bakBase || backupRoot(skillsDir);
+        if (flags.dryRun) log.dryRun('backup', c.name);
+        else { backupFolder(live, bakBase); log.action('backup', c.name); }
       }
-      // foreign: leave (don't touch)
+
+      if (c.kind === 'add') {
+        if (flags.dryRun) log.dryRun('add', c.name);
+        else { copyFolder(src, live); log.action('add', c.name); }
+        stamp(c.name, c.pkgHash);
+      } else if (c.kind === 'update' || c.kind === 'replace') {
+        if (!doBackup && fs.existsSync(live) && !flags.dryRun) removeFolder(live);
+        if (flags.dryRun) log.dryRun('replace', c.name);
+        else { copyFolder(src, live); log.action('replace', c.name); }
+        stamp(c.name, c.pkgHash);
+      } else if (c.kind === 'remove') {
+        if (!doBackup) {
+          if (flags.dryRun) log.dryRun('remove', c.name);
+          else { removeFolder(live); log.action('remove', c.name); }
+        }
+        delete manifest.skills[c.name];
+      }
     } catch (e) {
-      log.error(`I/O error on ${s.name}: ${e.message}`);
+      log.error(`I/O error on ${c.name}: ${e.message}`);
       ioError = true;
     }
   }
@@ -110,23 +167,14 @@ module.exports = async function update(flags) {
 
   // Summary
   log.plain('');
-  if (manifestVersionBefore && manifestVersionBefore !== PKG_VERSION) {
-    log.plain(`${PACKAGE_NAME}: ${manifestVersionBefore} → ${PKG_VERSION}`);
-  } else {
-    log.plain(`${PACKAGE_NAME}: ${PKG_VERSION}`);
-  }
+  const counts = changes.reduce((a, c) => (a[c.kind] = (a[c.kind] || 0) + 1, a), {});
   const parts = [];
-  if (stats.added) parts.push(`${stats.added} added`);
-  if (stats.updated) parts.push(`${stats.updated} updated`);
-  if (stats.keptEdited) parts.push(`${stats.keptEdited} edited (kept)`);
-  if (stats.droppedFromPackage) parts.push(`${stats.droppedFromPackage} no longer in package`);
-  if (stats.unchanged) parts.push(`${stats.unchanged} unchanged`);
-  log.plain(parts.length ? parts.join(', ') + '.' : 'nothing to do.');
-  if (stats.droppedFromPackage) {
-    log.plain(`Run \`crew uninstall && crew init\` to drop skills the package no longer ships.`);
-  }
+  if (counts.add) parts.push(`${counts.add} added`);
+  if (counts.update) parts.push(`${counts.update} updated`);
+  if (counts.replace) parts.push(`${counts.replace} replaced`);
+  if (counts.remove) parts.push(`${counts.remove} removed`);
+  log.plain(parts.join(', ') + '.');
 
   if (ioError) return 3;
-  if (refused) return 1;
   return 0;
 };
