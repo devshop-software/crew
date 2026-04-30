@@ -1,3 +1,10 @@
+# [0.6.0](https://github.com/devshop-software/crew/compare/v0.5.0...v0.6.0) (2026-04-30)
+
+
+### Features
+
+* remove indie skill ([7990a34](https://github.com/devshop-software/crew/commit/7990a34741155478226114f05562c35f854e47c8))
+
 # [0.5.0](https://github.com/devshop-software/crew/compare/v0.4.2...v0.5.0) (2026-04-30)
 
 
