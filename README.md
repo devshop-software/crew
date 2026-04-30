@@ -34,8 +34,8 @@ crew doctor    [--global]
 | Flag | Effect |
 |---|---|
 | `--global` | Target `~/.claude/skills/` (no `CLAUDE.md` handling). |
-| `--force` | Override prompts and refusals. |
-| `--yes` | Non-interactive (CI-safe). On `update`, defaults edited skills to backup-and-replace. |
+| `--force` | Override prompts and refusals (silently absorbs foreign collisions, replaces edits). |
+| `--yes` | Non-interactive (CI-safe). On `init`, refuses foreign collisions; on `update`, defaults edited skills to backup-and-replace. |
 | `--dry-run` | Print actions, write nothing. Exits 1 if errors *would have* occurred. |
 | `--no-claude-md` | On `init` only: skip the `CLAUDE.md` append. |
 
@@ -48,7 +48,7 @@ The CLI tracks a per-skill SHA-256 in `.claude/skills/.skills-manifest.json`. Ea
 - **managed-edited** — present, in manifest, you've edited it.
 - **foreign** — present but not in the manifest.
 
-`update` will never touch foreign skills. Only `init --force` can absorb a foreign folder into management (after backing it up to `.claude/skills/.bak/<utc>/<skill>/`). This is the bright line that keeps `update` boring.
+`update` will never touch foreign skills. On `init`, when foreign collisions are detected (a folder with the same name as a skill we ship, but not in our manifest), interactive runs prompt with the list and ask `[y/N]` to absorb them; `--force` absorbs silently; `--yes` refuses (CI-safe). Absorbed originals are backed up to `.claude/skills/.bak/<utc>/<skill>/`. This is the bright line that keeps `update` boring.
 
 For edited skills:
 

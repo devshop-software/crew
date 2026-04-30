@@ -2,7 +2,7 @@ const path = require('path');
 const { resolveTarget } = require('../lib/paths');
 const { readManifest, writeManifest, emptyManifest, diffSkills, PACKAGE_NAME, SCHEMA_VERSION } = require('../lib/manifest');
 const { copyFolder, backupFolder, backupRoot } = require('../lib/fsx');
-const { chooseEditAction } = require('../lib/prompt');
+const { chooseEditAction, confirmAbsorbForeign } = require('../lib/prompt');
 const { ensureWorkflowConfig } = require('../lib/claude-md');
 const log = require('../lib/log');
 
@@ -29,6 +29,19 @@ module.exports = async function init(flags) {
   const now = new Date().toISOString();
   const stamp = (name, hash) => { manifest.skills[name] = { version: PKG_VERSION, hash, installed_at: now }; };
 
+  // Foreign-collision handling: decide once for all such skills, up-front.
+  // --force: silent absorb. --yes: refuse (CI-safe). Otherwise prompt; default N.
+  let absorbForeign = false;
+  const foreignCollisions = diff.filter(s => s.state === 'foreign' && s.inPkg);
+  const interactive = process.stdin.isTTY || process.env.CREW_FAKE_TTY === '1';
+  if (foreignCollisions.length > 0) {
+    if (flags.force) {
+      absorbForeign = true;
+    } else if (!flags.yes && interactive) {
+      absorbForeign = await confirmAbsorbForeign(foreignCollisions.map(s => s.name));
+    }
+  }
+
   for (const s of diff) {
     if (!s.inPkg) continue;
     try {
@@ -48,7 +61,7 @@ module.exports = async function init(flags) {
         let action;
         if (flags.force) action = 'replace';
         else if (flags.yes) action = 'backup';
-        else if (!process.stdin.isTTY) {
+        else if (!interactive) {
           log.error(`Edited skill detected ('${s.name}') and stdin is not a TTY. Re-run with --yes or --force.`);
           refused = true;
           continue;
@@ -69,7 +82,7 @@ module.exports = async function init(flags) {
         else { copyFolder(path.join(PKG_SKILLS, s.name), path.join(skillsDir, s.name)); log.action('replace', s.name); }
         stamp(s.name, s.pkgHash);
       } else if (s.state === 'foreign') {
-        if (flags.force) {
+        if (absorbForeign) {
           bakBase = bakBase || backupRoot(skillsDir);
           if (flags.dryRun) { log.dryRun('backup', s.name); log.dryRun('copy', s.name); }
           else {

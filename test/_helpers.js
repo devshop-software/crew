@@ -55,15 +55,19 @@ function mkProject(dir, opts = {}) {
 }
 
 // Run the CLI in `cwd` with given args. Returns { code, stdout, stderr }.
+// opts.input — string written to stdin (use '' to close immediately).
+// opts.fakeTty — set to make the child believe stdin is a TTY (forces the
+//   prompt path; we still feed via opts.input).
 function run(cwd, args, opts = {}) {
   const env = { ...process.env, ...(opts.env || {}) };
-  // Pretend stdin is non-TTY by default — exercises the no-TTY refusal path
-  // when `--yes`/`--force` are absent.
+  if (opts.fakeTty) env.CREW_FAKE_TTY = '1';
+  const stdin = opts.input !== undefined ? 'pipe' : 'ignore';
   const r = spawnSync(process.execPath, [CLI, ...args], {
     cwd,
     env,
     encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe']
+    input: opts.input,
+    stdio: [stdin, 'pipe', 'pipe']
   });
   return { code: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
 }

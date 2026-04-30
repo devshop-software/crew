@@ -28,6 +28,7 @@ module.exports = async function update(flags) {
   let refused = false;
   let ioError = false;
   const now = new Date().toISOString();
+  const interactive = process.stdin.isTTY || process.env.CREW_FAKE_TTY === '1';
   const stamp = (name, hash) => { manifest.skills[name] = { version: PKG_VERSION, hash, installed_at: now }; };
 
   for (const s of diff) {
@@ -47,7 +48,7 @@ module.exports = async function update(flags) {
         let action;
         if (flags.force) action = 'replace';
         else if (flags.yes) action = 'backup';
-        else if (!process.stdin.isTTY) {
+        else if (!interactive) {
           log.error(`Edited skill detected ('${s.name}') and stdin is not a TTY. Re-run with --yes or --force.`);
           refused = true;
           continue;

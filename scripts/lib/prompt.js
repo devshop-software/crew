@@ -20,4 +20,21 @@ function chooseEditAction(skillName) {
   });
 }
 
-module.exports = { chooseEditAction };
+function confirmAbsorbForeign(skillNames) {
+  return new Promise((resolve) => {
+    console.log('');
+    console.log('The following skills already exist in .claude/skills/ but are not tracked by crew:');
+    console.log('');
+    for (const n of skillNames) console.log(`  - ${n}`);
+    console.log('');
+    console.log('Override and absorb them? Originals will be backed up to .claude/skills/.bak/<utc>/.');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question('[y/N] > ', (answer) => {
+      rl.close();
+      const a = (answer || '').trim().toLowerCase();
+      resolve(a === 'y' || a === 'yes');
+    });
+  });
+}
+
+module.exports = { chooseEditAction, confirmAbsorbForeign };

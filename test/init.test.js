@@ -69,6 +69,46 @@ test('init refuses on foreign-collision (exit 1)', () => {
   } finally { rmTmp(dir); }
 });
 
+test('init prompt + "y": absorbs foreign-collision (backup + replace)', () => {
+  const dir = mkTmp();
+  try {
+    mkProject(dir, { skills: { ship: { 'SKILL.md': 'user-ship' } } });
+    const r = run(dir, ['init'], { input: 'y\n', fakeTty: true });
+    assert.equal(r.code, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /already exist in \.claude\/skills\/ but are not tracked/);
+    assert.match(r.stdout, /backup ship/);
+    assert.match(r.stdout, /copy   ship/);
+    const m = readManifest(dir);
+    assert.equal('ship' in m.skills, true);
+    // Original is in .bak/<ts>/
+    const bakRoot = path.join(dir, '.claude', 'skills', '.bak');
+    const tsDirs = fs.readdirSync(bakRoot);
+    assert.equal(fs.readFileSync(path.join(bakRoot, tsDirs[0], 'ship', 'SKILL.md'), 'utf8'), 'user-ship');
+  } finally { rmTmp(dir); }
+});
+
+test('init prompt + "n": refuses foreign-collision (exit 1)', () => {
+  const dir = mkTmp();
+  try {
+    mkProject(dir, { skills: { ship: { 'SKILL.md': 'user-ship' } } });
+    const r = run(dir, ['init'], { input: 'n\n', fakeTty: true });
+    assert.equal(r.code, 1);
+    assert.match(r.stdout, /foreign skill present, refusing: ship/);
+    assert.equal(fs.readFileSync(path.join(dir, '.claude', 'skills', 'ship', 'SKILL.md'), 'utf8'), 'user-ship');
+    const m = readManifest(dir);
+    assert.equal('ship' in m.skills, false);
+  } finally { rmTmp(dir); }
+});
+
+test('init prompt + empty input defaults to N (refuse)', () => {
+  const dir = mkTmp();
+  try {
+    mkProject(dir, { skills: { ship: { 'SKILL.md': 'user-ship' } } });
+    const r = run(dir, ['init'], { input: '\n', fakeTty: true });
+    assert.equal(r.code, 1);
+  } finally { rmTmp(dir); }
+});
+
 test('init --force absorbs foreign-collision (backup + replace)', () => {
   const dir = mkTmp();
   try {
