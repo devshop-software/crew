@@ -1,3 +1,10 @@
+# [0.4.0](https://github.com/devshop-software/crew/compare/v0.3.0...v0.4.0) (2026-04-30)
+
+
+### Features
+
+* migrate to npmjs.com as @devshop/crew ([a2ea3c1](https://github.com/devshop-software/crew/commit/a2ea3c1d5454ead7dd16bde6916a708eca520946))
+
 # [0.3.0](https://github.com/devshop-software/crew/compare/v0.2.1...v0.3.0) (2026-04-30)
 
 
