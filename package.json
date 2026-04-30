@@ -1,6 +1,6 @@
 {
   "name": "@devshop/crew",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Project-agnostic Claude Code skills for spec → implement → qa → review → ship",
   "bin": {
     "crew": "scripts/cli.js"
