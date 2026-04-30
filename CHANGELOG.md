@@ -1,3 +1,10 @@
+# [0.2.0](https://github.com/devshop-software/crew/compare/v0.1.0...v0.2.0) (2026-04-30)
+
+
+### Features
+
+* ship real skill content (12 skills incl. prep) ([b86bd9a](https://github.com/devshop-software/crew/commit/b86bd9abb361f973023a441d2c808917834c4e1b))
+
 # Changelog
 
 ## 0.1.0 — 2026-04-30

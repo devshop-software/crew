@@ -1,8 +1,10 @@
 {
   "name": "@devshop-software/crew",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Project-agnostic Claude Code skills for spec → implement → qa → review → ship",
-  "bin": { "crew": "scripts/cli.js" },
+  "bin": {
+    "crew": "scripts/cli.js"
+  },
   "files": [
     "skills/",
     "templates/",
@@ -11,8 +13,17 @@
     "CHANGELOG.md",
     "LICENSE"
   ],
-  "engines": { "node": ">=20" },
-  "keywords": ["claude-code", "claude", "skills", "agentic", "workflow", "crew"],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "claude-code",
+    "claude",
+    "skills",
+    "agentic",
+    "workflow",
+    "crew"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/devshop-software/crew.git"
