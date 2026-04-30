@@ -1,3 +1,10 @@
+## [0.4.2](https://github.com/devshop-software/crew/compare/v0.4.1...v0.4.2) (2026-04-30)
+
+
+### Bug Fixes
+
+* publish to npm in prepare phase so failed publish can't orphan tags ([6ee8e5a](https://github.com/devshop-software/crew/commit/6ee8e5aacc4ed698e0e51c17891bd8b699faafb7))
+
 # [0.4.0](https://github.com/devshop-software/crew/compare/v0.3.0...v0.4.0) (2026-04-30)
 
 
