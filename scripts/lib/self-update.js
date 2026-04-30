@@ -38,11 +38,16 @@ function isLocalDep(projectRoot) {
   } catch { return false; }
 }
 
+// Range-respecting update so we don't rewrite the user's package.json
+// version specifier. To always pull the absolute latest across majors,
+// users can pin "@devshop/crew": "latest" in their package.json (a dist-tag,
+// not a semver range — never gets rewritten); for "all 0.x but never 1.x"
+// use "0.x". Any caret/tilde range will be honored as written.
 const UPDATE_ARGS = {
-  pnpm: ['update', PACKAGE_NAME, '--latest'],
-  npm: ['install', `${PACKAGE_NAME}@latest`],
-  yarn: ['upgrade', PACKAGE_NAME, '--latest'],
-  bun: ['update', PACKAGE_NAME, '--latest']
+  pnpm: ['update', PACKAGE_NAME],
+  npm: ['update', PACKAGE_NAME],
+  yarn: ['upgrade', PACKAGE_NAME],
+  bun: ['update', PACKAGE_NAME]
 };
 
 // Returns one of:

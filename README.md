@@ -19,7 +19,7 @@ pnpm exec crew init
 
 To pull newer skill content later, run `pnpm exec crew update`. The flow:
 
-1. Auto-detects the package manager (pnpm / npm / yarn / bun) from your lockfile and runs `<pm> update @devshop/crew --latest` to bump the package.
+1. Auto-detects the package manager (pnpm / npm / yarn / bun) from your lockfile and runs `<pm> update @devshop/crew` to bump the package within the range you've pinned in `package.json`. To always pull the absolute newest (including across major versions), set the range to `"latest"`; for "any 0.x" use `"0.x"`.
 2. Re-execs the freshly-installed CLI.
 3. Computes the diff and prints a plan: which skills will be added, updated, replaced (had local edits), or removed (no longer in the package).
 4. Prompts `Apply these changes? [Y/n]`. Default Y. Press `n` to abort with no writes.
