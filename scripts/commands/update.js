@@ -31,6 +31,7 @@ module.exports = async function update(flags) {
     return 1;
   }
 
+  const manifestVersionBefore = manifest.package_version;
   const diff = diffSkills(PKG_SKILLS, skillsDir, manifest);
   let bakBase = null;
   let refused = false;
@@ -38,19 +39,30 @@ module.exports = async function update(flags) {
   const now = new Date().toISOString();
   const interactive = process.stdin.isTTY || process.env.CREW_FAKE_TTY === '1';
   const stamp = (name, hash) => { manifest.skills[name] = { version: PKG_VERSION, hash, installed_at: now }; };
+  const stats = { added: 0, updated: 0, keptEdited: 0, droppedFromPackage: 0, unchanged: 0 };
 
   for (const s of diff) {
+    // Skill in manifest+disk but no longer in the package — keep it but tell the user.
+    if (!s.inPkg && s.inDisk && s.mfHash) {
+      log.warn(`kept (no longer in package): ${s.name}`);
+      stats.droppedFromPackage++;
+      continue;
+    }
     if (!s.inPkg) continue;
     try {
       if (s.state === 'missing') {
         if (flags.dryRun) log.dryRun('copy', s.name);
         else { copyFolder(path.join(PKG_SKILLS, s.name), path.join(skillsDir, s.name)); log.action('copy', s.name); }
         stamp(s.name, s.pkgHash);
+        stats.added++;
       } else if (s.state === 'managed-unchanged') {
         if (s.diskHash !== s.pkgHash) {
           if (flags.dryRun) log.dryRun('replace', s.name);
           else { copyFolder(path.join(PKG_SKILLS, s.name), path.join(skillsDir, s.name)); log.action('replace', s.name); }
           stamp(s.name, s.pkgHash);
+          stats.updated++;
+        } else {
+          stats.unchanged++;
         }
       } else if (s.state === 'managed-edited') {
         let action;
@@ -66,6 +78,7 @@ module.exports = async function update(flags) {
         if (action === 'keep') {
           if (flags.dryRun) log.dryRun('keep', s.name);
           else log.action('keep', s.name);
+          stats.keptEdited++;
           continue;
         }
         if (action === 'backup') {
@@ -76,6 +89,7 @@ module.exports = async function update(flags) {
         if (flags.dryRun) log.dryRun('replace', s.name);
         else { copyFolder(path.join(PKG_SKILLS, s.name), path.join(skillsDir, s.name)); log.action('replace', s.name); }
         stamp(s.name, s.pkgHash);
+        stats.updated++;
       }
       // foreign: leave (don't touch)
     } catch (e) {
@@ -92,6 +106,24 @@ module.exports = async function update(flags) {
     manifest.updated_at = now;
     try { writeManifest(skillsDir, manifest); }
     catch (e) { log.error(`Failed writing manifest: ${e.message}`); return 3; }
+  }
+
+  // Summary
+  log.plain('');
+  if (manifestVersionBefore && manifestVersionBefore !== PKG_VERSION) {
+    log.plain(`${PACKAGE_NAME}: ${manifestVersionBefore} → ${PKG_VERSION}`);
+  } else {
+    log.plain(`${PACKAGE_NAME}: ${PKG_VERSION}`);
+  }
+  const parts = [];
+  if (stats.added) parts.push(`${stats.added} added`);
+  if (stats.updated) parts.push(`${stats.updated} updated`);
+  if (stats.keptEdited) parts.push(`${stats.keptEdited} edited (kept)`);
+  if (stats.droppedFromPackage) parts.push(`${stats.droppedFromPackage} no longer in package`);
+  if (stats.unchanged) parts.push(`${stats.unchanged} unchanged`);
+  log.plain(parts.length ? parts.join(', ') + '.' : 'nothing to do.');
+  if (stats.droppedFromPackage) {
+    log.plain(`Run \`crew uninstall && crew init\` to drop skills the package no longer ships.`);
   }
 
   if (ioError) return 3;
