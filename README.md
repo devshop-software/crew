@@ -17,6 +17,8 @@ pnpm add -D @devshop/crew
 pnpm exec crew init
 ```
 
+To pull newer skill content later, just run `pnpm exec crew update` — it auto-detects the package manager (pnpm/npm/yarn/bun) from your lockfile, runs `<pm> update @devshop/crew` to refresh the local install, then re-execs the freshly-installed CLI to apply the new skills. Pass `--no-self-update` to skip the package bump and only re-apply what's already on disk.
+
 This copies the skills into `./.claude/skills/`, writes a manifest, and appends a `## Workflow Config` block to `CLAUDE.md` (creating it if absent).
 
 ## Commands

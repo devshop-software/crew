@@ -3,6 +3,7 @@ const { resolveTarget } = require('../lib/paths');
 const { readManifest, writeManifest, diffSkills, PACKAGE_NAME, SCHEMA_VERSION } = require('../lib/manifest');
 const { copyFolder, backupFolder, backupRoot } = require('../lib/fsx');
 const { chooseEditAction } = require('../lib/prompt');
+const { runSelfUpdate } = require('../lib/self-update');
 const log = require('../lib/log');
 
 const PKG_ROOT = path.resolve(__dirname, '..', '..');
@@ -10,6 +11,13 @@ const PKG_VERSION = require(path.join(PKG_ROOT, 'package.json')).version;
 const PKG_SKILLS = path.join(PKG_ROOT, 'skills');
 
 module.exports = async function update(flags) {
+  // If installed as a local dep, bump the package via the project's package
+  // manager first, then re-exec the freshly-installed CLI to do the actual
+  // skill update. Skipped for global/dlx invocations (no project lockfile).
+  const self = runSelfUpdate(flags, log);
+  if (self.error) { log.error(self.message); return self.exitCode; }
+  if (self.reExec) return self.exitCode;
+
   let target;
   try { target = resolveTarget(flags); }
   catch (e) { log.error(e.message); return e.exitCode || 2; }

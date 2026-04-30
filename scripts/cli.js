@@ -19,12 +19,13 @@ function usage() {
     '  --force          Override prompts and refusals.',
     '  --yes            Non-interactive (CI-safe defaults).',
     '  --dry-run        Print actions, write nothing.',
-    '  --no-claude-md   On init only: skip CLAUDE.md append.'
+    '  --no-claude-md   On init only: skip CLAUDE.md append.',
+    '  --no-self-update On update only: skip pulling a newer package via the local PM.'
   ].join('\n');
 }
 
 function parseArgs(argv) {
-  const flags = { global: false, force: false, yes: false, dryRun: false, noClaudeMd: false };
+  const flags = { global: false, force: false, yes: false, dryRun: false, noClaudeMd: false, noSelfUpdate: false };
   let command = null;
   for (const a of argv) {
     if (a.startsWith('--')) {
@@ -34,6 +35,7 @@ function parseArgs(argv) {
         case '--yes': flags.yes = true; break;
         case '--dry-run': flags.dryRun = true; break;
         case '--no-claude-md': flags.noClaudeMd = true; break;
+        case '--no-self-update': flags.noSelfUpdate = true; break;
         case '--help': process.stdout.write(usage() + '\n'); process.exit(0);
         default:
           process.stderr.write(`Unknown flag: ${a}\n\n${usage()}\n`);
