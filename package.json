@@ -16,6 +16,7 @@
   "engines": {
     "node": ">=20"
   },
+  "packageManager": "pnpm@10.33.2",
   "keywords": [
     "claude-code",
     "claude",
@@ -37,10 +38,10 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@devshop/crew": "^0.4.1",
-    "semantic-release": "^24.2.0",
+    "@devshop/crew": "0.x",
     "@semantic-release/changelog": "^6.0.3",
-    "@semantic-release/exec": "^7.0.3",
-    "@semantic-release/git": "^10.0.1"
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/git": "^10.0.1",
+    "semantic-release": "^24.2.9"
   }
 }
