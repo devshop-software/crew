@@ -1,4 +1,6 @@
 node_modules/
 *.log
 .DS_Store
+.claude/
 .claude/skills/.bak/
+skills_copy/

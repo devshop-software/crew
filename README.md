@@ -19,7 +19,7 @@ Then, from inside any project:
 npx @devshop-software/crew@latest init
 ```
 
-This copies the 11 skills into `./.claude/skills/`, writes a manifest, and appends a `## Workflow Config` block to `CLAUDE.md` (creating it if absent).
+This copies the skills into `./.claude/skills/`, writes a manifest, and appends a `## Workflow Config` block to `CLAUDE.md` (creating it if absent).
 
 ## Commands
 
