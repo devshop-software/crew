@@ -1,3 +1,10 @@
+# [0.7.0](https://github.com/devshop-software/crew/compare/v0.6.0...v0.7.0) (2026-04-30)
+
+
+### Features
+
+* surface what crew update actually did ([51894c5](https://github.com/devshop-software/crew/commit/51894c5ed8a3f5f5fbb7746c0c77ab83ffd0d70d))
+
 # [0.6.0](https://github.com/devshop-software/crew/compare/v0.5.0...v0.6.0) (2026-04-30)
 
 
