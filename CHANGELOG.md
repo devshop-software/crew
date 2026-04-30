@@ -1,3 +1,10 @@
+# [0.5.0](https://github.com/devshop-software/crew/compare/v0.4.2...v0.5.0) (2026-04-30)
+
+
+### Features
+
+* crew update auto-bumps the local package via the project's PM ([9e39abd](https://github.com/devshop-software/crew/commit/9e39abdb7c51fba87c38802a07718af9725dccd2))
+
 ## [0.4.2](https://github.com/devshop-software/crew/compare/v0.4.1...v0.4.2) (2026-04-30)
 
 
