@@ -59,6 +59,8 @@ test('init refuses on foreign-collision (exit 1)', () => {
     const r = run(dir, ['init', '--yes']);
     assert.equal(r.code, 1, r.stdout + r.stderr);
     assert.match(r.stdout + r.stderr, /foreign skill present, refusing: ship/);
+    // The "Next:" success hint must NOT appear when init refused
+    assert.doesNotMatch(r.stdout, /Next: open this project/);
     // No manifest entry for ship, since it was refused
     const m = readManifest(dir);
     assert.equal(fs.readFileSync(path.join(dir, '.claude', 'skills', 'ship', 'SKILL.md'), 'utf8'), 'user-ship');

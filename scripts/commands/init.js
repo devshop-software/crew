@@ -109,10 +109,10 @@ module.exports = async function init(flags) {
     } catch (e) { log.error(`CLAUDE.md: ${e.message}`); ioError = true; }
   }
 
-  log.plain('');
-  log.plain('Next: open this project in Claude Code and run /adjust.');
-
   if (ioError) return 3;
   if (refused) return 1;
+
+  log.plain('');
+  log.plain('Next: open this project in Claude Code and run /adjust.');
   return 0;
 };

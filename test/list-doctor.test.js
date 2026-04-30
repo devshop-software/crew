@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const { mkTmp, rmTmp, mkProject, run, PKG_SKILL_NAMES } = require('./_helpers');
+const PKG_VERSION = require('../package.json').version;
+const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 test('list on empty project: prints "No crew installation"', () => {
   const dir = mkTmp();
@@ -22,7 +24,7 @@ test('list after init: shows all skills with version + installed_at', () => {
     const r = run(dir, ['list']);
     assert.equal(r.code, 0);
     for (const name of PKG_SKILL_NAMES) {
-      assert.match(r.stdout, new RegExp(name + '\\s+0\\.1\\.0'));
+      assert.match(r.stdout, new RegExp(name + '\\s+' + escapeRe(PKG_VERSION)));
     }
   } finally { rmTmp(dir); }
 });
