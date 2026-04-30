@@ -1,5 +1,5 @@
 {
-  "name": "@devshop-software/crew",
+  "name": "@devshop/crew",
   "version": "0.3.0",
   "description": "Project-agnostic Claude Code skills for spec → implement → qa → review → ship",
   "bin": {
@@ -29,7 +29,7 @@
     "url": "https://github.com/devshop-software/crew.git"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
+    "registry": "https://registry.npmjs.org/",
     "access": "public"
   },
   "scripts": {

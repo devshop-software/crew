@@ -4,19 +4,17 @@ Project-agnostic Claude Code skills for spec → implement → qa → review →
 
 ## Install
 
-The package lives on **GitHub Packages**, so consumers need the registry mapping in `~/.npmrc` or the project's `.npmrc`:
-
-```ini
-@devshop-software:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=<PAT_with_read:packages>
-```
-
-(If GitHub has enabled unauthenticated reads for public packages on their npm registry by the time you read this, the token line is unnecessary.)
-
-Then, from inside any project:
+Public on npmjs.com — no registry config or token needed.
 
 ```sh
-npx @devshop-software/crew@latest init
+npx @devshop/crew@latest init
+```
+
+Or as a project dev dependency:
+
+```sh
+pnpm add -D @devshop/crew
+pnpm exec crew init
 ```
 
 This copies the skills into `./.claude/skills/`, writes a manifest, and appends a `## Workflow Config` block to `CLAUDE.md` (creating it if absent).
@@ -68,18 +66,7 @@ For edited skills:
 
 ## Maintainer publish
 
-```sh
-npm publish
-```
-
-`publishConfig.registry` in `package.json` directs this at GitHub Packages. Ensure `~/.npmrc` has a PAT with `write:packages, read:packages, repo`:
-
-```
-//npm.pkg.github.com/:_authToken=<MAINTAINER_PAT>
-@devshop-software:registry=https://npm.pkg.github.com
-```
-
-Tag in git (`git tag v0.1.0 && git push --tags`) so the published version matches a commit.
+Releases are automated. Push a conventional-commit message (`feat:`, `fix:`, `BREAKING CHANGE:`) to `main` and `.github/workflows/ci.yml` runs semantic-release: computes the next semver, bumps `package.json`, prepends a `CHANGELOG.md` entry, tags `vX.Y.Z`, publishes to npmjs.com, and creates a GitHub release. The `NPM_TOKEN` repo secret authenticates the npm publish.
 
 ## License
 

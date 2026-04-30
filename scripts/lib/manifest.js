@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { hashSkill } = require('./hash');
 
-const PACKAGE_NAME = '@devshop-software/crew';
+const PACKAGE_NAME = '@devshop/crew';
 const SCHEMA_VERSION = 1;
 
 function manifestPath(skillsDir) {
