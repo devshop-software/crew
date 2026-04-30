@@ -1,3 +1,10 @@
+## [0.2.1](https://github.com/devshop-software/crew/compare/v0.2.0...v0.2.1) (2026-04-30)
+
+
+### Bug Fixes
+
+* don't print "Next: ... /adjust" line when init refused ([8175644](https://github.com/devshop-software/crew/commit/81756442a00e39955e0bebd2dd7f6687df2479a7))
+
 # [0.2.0](https://github.com/devshop-software/crew/compare/v0.1.0...v0.2.0) (2026-04-30)
 
 
