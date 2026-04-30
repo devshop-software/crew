@@ -1,3 +1,10 @@
+# [0.8.0](https://github.com/devshop-software/crew/compare/v0.7.0...v0.8.0) (2026-04-30)
+
+
+### Features
+
+* redesigned crew update — plan, confirm, optional backup, auto-remove ([4859ca0](https://github.com/devshop-software/crew/commit/4859ca0f7a424ab32b14fa8bf3ef5ed83c26a6a1))
+
 # [0.7.0](https://github.com/devshop-software/crew/compare/v0.6.0...v0.7.0) (2026-04-30)
 
 
