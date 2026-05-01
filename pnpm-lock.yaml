@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@devshop/crew':
-        specifier: 0.x
-        version: 0.5.0
+        specifier: ~0.8.0
+        version: 0.8.0
       '@semantic-release/changelog':
         specifier: ^6.0.3
         version: 6.0.3(semantic-release@24.2.9)
@@ -38,8 +38,8 @@ packages:
     resolution: {integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==}
     engines: {node: '>=0.1.90'}
 
-  '@devshop/crew@0.5.0':
-    resolution: {integrity: sha512-zbNwdcXxrV1g04xERvrM5PBC4kmtSTum94Z31AQNLdnL81rwjMWyjyaR6xHZ4qzM3ZiQK2nJqXEP+vvxkGszrg==}
+  '@devshop/crew@0.8.0':
+    resolution: {integrity: sha512-n85umzspncuYgPI6aCCkooFcJz7wgpvlKL0hztcy8o2K6sSJ177rDN++jzj3MH2Aw+ExiU69sPc73Ulamn+aag==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -1235,7 +1235,7 @@ snapshots:
   '@colors/colors@1.5.0':
     optional: true
 
-  '@devshop/crew@0.5.0': {}
+  '@devshop/crew@0.8.0': {}
 
   '@octokit/auth-token@6.0.0': {}
 
