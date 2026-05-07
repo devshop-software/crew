@@ -1,6 +1,6 @@
 ---
 name: prep
-description: Interactive brief-writer. Produces a two-part `<FEATURE>-BRIEF.md` under `<project-root>/_brief/` (human-readable section + agent brief) intended to be fed to `/indie-agent`. Project root is auto-detected (bare-clone layout via `.bare/`, otherwise git toplevel). Reads project conventions from `CLAUDE.md` at runtime — contains no project-specific knowledge. Use when the user invokes /prep.
+description: Interactive brief-writer. Produces a two-part `<FEATURE>-BRIEF.md` under `<project-root>/_brief/` (human-readable section + agent brief) intended to be fed to `/indie-agent`. Project root is auto-detected: nearest ancestor whose `CLAUDE.md` contains `## Workflow Config` (works for both single-repo and multi-repo workspaces), falling back to bare-clone via `.bare/` or git toplevel if no workflow config is set yet. Reads project conventions from `CLAUDE.md` at runtime — contains no project-specific knowledge. Use when the user invokes /prep.
 ---
 
 # Prep
@@ -74,15 +74,20 @@ If an answer is vague, follow up once. Two rounds max — don't interrogate.
 
 Briefs live in `<project-root>/_brief/<SLUG>-BRIEF.md`. Resolve the project root generically, in this order:
 
-1. **Bare-clone layout** — walk up from CWD. If any ancestor directory contains a `.bare/` subdirectory (a bare git repo used by a worktree-layout setup), that ancestor is the project root.
-2. **Regular git repo** — otherwise, run `git rev-parse --show-toplevel`. The result is the project root.
-3. **Fallback** — if neither applies, use the CWD and warn the user that no project root was detected.
+1. **Workflow Config anchor (preferred)** — walk up from CWD. The first ancestor whose `CLAUDE.md` contains a `## Workflow Config` heading is the project root. This works for both shapes:
+   - **Single-repo project** — the project-root `CLAUDE.md` has `## Workflow Config` (written by `/adjust`). Found at the project root.
+   - **Multi-repo workspace** — the workspace-root `CLAUDE.md` has `## Workflow Config`; sub-repo `CLAUDE.md` files (if any exist inside `<stack>/main/`) do not, since `/adjust` only writes workflow config at workspace root. Walking up from `backend/main/<wt>/` finds the workspace root, not the stack root.
+2. **Bare-clone layout (fallback)** — if no `## Workflow Config` is found above, walk up looking for a `.bare/` subdirectory. The ancestor containing it is the project root. (Used when `/adjust` hasn't run yet but the bare-clone is set up.)
+3. **Regular git repo (fallback)** — otherwise, run `git rev-parse --show-toplevel`. The result is the project root.
+4. **Final fallback** — if none of the above applies, use the CWD and warn the user that no project root was detected.
+
+In workspace mode, the resolved project root is the **workspace root** — the brief lives there, not inside any sub-repo. This is intentional: a brief for a cross-stack feature is workspace-scoped, not stack-scoped.
 
 Create `<project-root>/_brief/` if it does not exist. Write the file there.
 
 ### Lifecycle — the brief is ephemeral
 
-The brief lives at the **top layer** of the project (e.g. the bare-clone root), outside any tracked working copy. It is not committed and will be deleted once consumed. History of a feature lives in `<workflow-dir>/` under the worktree that shipped it — that is where spec, implementation, QA, and review artifacts persist.
+The brief lives at the **top layer** of the project — the bare-clone root in single-repo projects, or the workspace root in multi-repo workspaces — outside any tracked working copy. It is not committed and will be deleted once consumed. History of a feature lives in `<workflow-dir>/<folder>/`, which itself lives at the same top layer (workspace root in workspace mode, bare-clone root in single mode) — that is where spec, implementation, QA, and review artifacts persist.
 
 Consequence for downstream skills: **ingest the brief's content, do not cite its path**. A `_workflow/.../01-spec.md` that references `../_brief/FOO-BRIEF.md` will break the first time someone cleans up `_brief/`. Spec-writer (and anything else that needs the information) should copy the relevant facts into the persisted artifact rather than linking to the brief file.
 
@@ -178,7 +183,7 @@ Briefs are ephemeral handoff artifacts and should not be committed.
 1. Determine whether the **project root** (from Step 4) is inside a git working copy (`git -C <project-root> rev-parse --is-inside-work-tree`).
 2. If yes, read the project root's `.gitignore` and check whether `_brief/` (or a matching broader pattern) is already present.
 3. If not, append `_brief/` with a short comment explaining what it is.
-4. If the project root is **not** inside a working copy (typical for a bare-clone root, which only hosts sibling worktrees), skip this step. The folder is outside any tracked tree, so gitignore is irrelevant. Note this to the user so they understand why no `.gitignore` was touched.
+4. If the project root is **not** inside a working copy (typical for a bare-clone root or a multi-repo workspace root, neither of which is itself a git repo), skip this step. The folder is outside any tracked tree, so gitignore is irrelevant. Note this to the user so they understand why no `.gitignore` was touched.
 
 Never create a `.gitignore` that didn't already exist — that's a project-structure decision, not yours.
 
