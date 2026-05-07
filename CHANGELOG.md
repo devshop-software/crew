@@ -1,3 +1,10 @@
+# [0.9.0](https://github.com/devshop-software/crew/compare/v0.8.1...v0.9.0) (2026-05-07)
+
+
+### Features
+
+* **prep:** simplify input handling and rephrase boundary question ([2679e32](https://github.com/devshop-software/crew/commit/2679e3208a36aaca816e3997914707874ff5709f))
+
 ## [0.8.1](https://github.com/devshop-software/crew/compare/v0.8.0...v0.8.1) (2026-04-30)
 
 
