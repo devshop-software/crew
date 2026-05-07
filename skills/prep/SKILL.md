@@ -25,8 +25,7 @@ Activate when called from the `/prep` command. Otherwise ignore.
 
 - **Empty** — ask: *"What's the feature? A one-sentence description works."*
 - **Free text** — a rough description. Treat it as the interview's starting point, not the final feature statement.
-- **Path to an existing `*-BRIEF.md`** — enter **edit mode**: read it, ask what should change, update in place.
-- Contains `--quick` — skip the interview and produce the brief in one pass from whatever context the user gave. Use this only when the user has already stated the feature clearly enough to write the brief without follow-up.
+- **Path to an existing `*-BRIEF.md`** — read it, identify which sections are empty or thin, run the interview only for those gaps.
 
 ---
 
@@ -54,14 +53,14 @@ Before asking questions, spend a few minutes verifying the feature maps to real 
 
 ---
 
-## Step 3 — Interview (skip if `--quick`)
+## Step 3 — Interview
 
 Ask targeted questions in **one batch** (not drip-fed). Choose 3–6 from:
 
 1. **What's broken / needed** — one sentence in the user's own words, if the rough description was vague.
 2. **Concrete motivating source** — a PR, bug report, dated incident, workflow folder, ticket. "Why now?" This often becomes the brief's strongest paragraph.
 3. **Decisions already made** — what has the user already ruled in or out? These are the non-obvious constraints no code-reading will reveal (e.g. *"we're nuking both DBs before this lands"*).
-4. **Out of scope** — what's tempting but explicitly excluded? Ask even if the user didn't mention it; out-of-scope is where briefs silently fail.
+4. **Boundary** — where's the edge of this feature? What's adjacent that we want to deliberately leave alone — something a developer might be tempted to also fix here? Ask even if the user didn't mention it; this is where briefs silently fail.
 5. **Acceptance shape** — what must be observably true when this is done? 1–3 items, not exhaustive. You'll flesh them out when drafting.
 6. **Post-merge manual steps** — anything a human has to do after the PR merges (DB operations, flag flips, smoke checks)?
 
@@ -90,8 +89,6 @@ Consequence for downstream skills: **ingest the brief's content, do not cite its
 ### Filename
 
 `<SLUG>-BRIEF.md` — uppercase kebab-case slug derived from the feature title (e.g. `MIGRATION-CONSOLIDATION-BRIEF.md`, `DARK-MODE-BRIEF.md`). The `-BRIEF.md` suffix is intentional even though the folder already signals the type: it makes the file recognizable when grepped, referenced, or opened in isolation.
-
-An optional second argument to `/prep` may override the full output path. Default follows the rule above.
 
 ### Structure
 
@@ -201,17 +198,6 @@ If the user requests changes, update in place. Re-present only the changed secti
 
 ---
 
-## Edit mode
-
-When invoked with a path to an existing brief:
-
-1. Read it.
-2. Ask what should change (or act on the user's input if they already said).
-3. Update in place; preserve the two-section structure.
-4. Re-present the changed section only.
-
----
-
 ## Constraints
 
 **DO:**
@@ -225,7 +211,7 @@ When invoked with a path to an existing brief:
 - Embed project-specific tool names, framework names, or conventions into the skill file itself. This skill must work in any codebase that has a `CLAUDE.md`.
 - Duplicate content across the two sections — state each thing once, in the section where it belongs.
 - Pad the human section with mechanical detail. If it's longer than one screen, it's failing.
-- Skip the interview in default mode. The point of `/prep` is to extract what only the user knows.
+- Skip the interview. The point of `/prep` is to extract what only the user knows.
 - Explore the codebase to spec-writer depth. This is *pre-spec* work.
 - Prescribe mechanisms (hooks, CSS utilities, component layout, file-level changes) unless the user explicitly committed to one during the interview. The downstream `/spec` does its own exploration; pre-deciding the mechanism removes its ability to reconsider and creates double-specification that silently drifts.
 - Pre-stamp the spec's depth. `/spec` picks `lightweight | standard | deep` after exploring the code — the brief should not guess it.
