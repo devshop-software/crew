@@ -93,6 +93,24 @@ Do not prescribe a fixed search strategy. Every codebase is shaped differently. 
 
 ---
 
+## Step 4b — Survey `.feature` Files
+
+If the project has user-visible behaviour (most do), check the project's `features/` directory for Gherkin `.feature` files — they are the source of truth for e2e scenarios.
+
+1. **List `features/*.feature`.** If the directory does not exist or is empty, warn the user: *"No `.feature` files found. Project needs a one-time bootstrap pass to seed `features/` from the application's user-facing capabilities. Continue without Gherkin Impact, or pause to bootstrap?"*
+2. **Identify affected files.** For the feature being spec'd, name the `.feature` file(s) that cover the capability it touches. One feature usually maps to one (sometimes two) existing `.feature` files — never to a brand-new file.
+3. **Determine the extension shape.** For each affected file, decide how the spec extends it:
+   - **`Scenario Outline` row addition** — the journey already exists, just needs another data row.
+   - **`And`-step addition to an existing scenario** — the journey already exists, the new feature adds an assertion or step.
+   - **New scenario** — *last resort.* Only when no existing scenario fits the user journey, and the feature truly introduces a new user-observable behaviour.
+4. **Surface prune candidates.** If the feature retires capability, name scenarios likely to become obsolete. The human decides actual deletion.
+
+This survey feeds the spec's "Gherkin Impact" section (Step 7).
+
+> **No new `.feature` files at the per-feature level.** New `.feature` files are bootstrap territory. Per-feature work extends what exists.
+
+---
+
 ## Step 5 — Determine Spec Depth
 
 Based on complexity detected in steps 3–4, choose a depth:
@@ -181,7 +199,22 @@ What to replicate from the template and what differs for this feature.
 - [ ] Criterion (specific, testable)
 - [ ] Criterion
 
-> These criteria are the contract that flows downstream. The review skill checks whether the implementation meets them. The qa-engineer skill writes e2e tests to prove them. Write them so they are verifiable by both a code reviewer and an automated test.
+> These criteria are the contract that flows downstream. The review skill checks whether the implementation meets them. The qa-engineer skill routes each criterion to the right venue — Gherkin scenario, lint rule, unit test, or impl-report check-result — per the project's traceability model. Write criteria so they are verifiable, but do not assume they all become e2e tests.
+
+## Gherkin Impact
+
+(Skip if the project has no `features/` directory; flag a bootstrap need instead.)
+
+**Affected `.feature` files:**
+- `features/<file>.feature` — <one-line capability summary>
+
+**Extensions:**
+- **Outline rows:** `<scenario title>` gets a new row in `Examples:` for `<input variant>`
+- **`And`-step additions:** `<scenario title>` gains *"And <new assertion>"* under <Given/When/Then>
+- **New scenarios** (only when no existing scenario fits): `<HP-N | ER-N | EC-N | RG-N> - <title>` in `<file>.feature`. Reason: <why no existing scenario could be extended>
+
+**Prune candidates** (capability being retired):
+- `<scenario title>` in `<file>.feature` — likely obsolete because <reason>. Human decides removal.
 
 ## Workflow Config
 
@@ -234,7 +267,9 @@ When invoked with a path to an existing spec (or the user asks to revise):
 - Read the codebase before writing anything
 - Reference specific file paths, function names, type names in every implementation step
 - Find and cite a structural template (the closest existing similar feature)
-- Write acceptance criteria that are verifiable by both a code reviewer and an e2e test — they flow to the review and qa-engineer skills
+- Write acceptance criteria that are verifiable — they flow to review (code-level verification) and qa-engineer (venue routing: Gherkin scenario / lint rule / unit test / impl check-result)
+- Survey existing `.feature` files and prefer extending them — outline rows or `And`-step additions before new scenarios
+- Surface prune candidates when capability retires (human decides actual removal)
 - Scale spec depth to task complexity
 - Include the workflow config in the output for downstream skills
 - Make decisions — be opinionated
@@ -245,6 +280,8 @@ When invoked with a path to an existing spec (or the user asks to revise):
 - List alternatives — pick one and explain why
 - Skip codebase exploration for any reason
 - Create a spec for requirements that are unclear — ask first
+- Create new `.feature` files at the per-feature level — bootstrap is a separate one-off; per-feature work extends what exists
+- Assume every acceptance criterion becomes an e2e test — qa-engineer routes ACs by nature; criteria that aren't user-observable belong in lint rules, unit tests, or impl check-results
 
 ---
 
@@ -257,3 +294,5 @@ If you catch yourself thinking any of these, stop:
 - "The user's description is clear enough, no ambiguity check needed" — STOP. Spend 30 seconds checking.
 - "I'll keep the acceptance criteria general to be flexible" — STOP. Vague criteria are untestable and unusable by downstream skills. Be specific.
 - "There's no similar feature to use as a template" — STOP. Look harder. There is almost always a structural analog somewhere in the codebase.
+- "This feature is new enough to deserve its own `.feature` file" — STOP. New `.feature` files are bootstrap territory. If the feature truly defines a new user-facing capability with no precedent in `features/`, that's a bootstrap pass, not per-feature spec-writer work. Flag it for the user.
+- "I'll add a new scenario for each new acceptance criterion" — STOP. Prefer outline rows or `And`-step additions to existing scenarios. New scenarios require a stated reason in Gherkin Impact.
