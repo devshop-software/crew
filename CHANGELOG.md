@@ -1,3 +1,10 @@
+# [0.10.0](https://github.com/devshop-software/crew/compare/v0.9.1...v0.10.0) (2026-05-07)
+
+
+### Features
+
+* **skills:** adopt Gherkin-anchored e2e model with traceability routing ([4a3612a](https://github.com/devshop-software/crew/commit/4a3612acbe802b0dee53ab31e6139d69d76d397c))
+
 ## [0.9.1](https://github.com/devshop-software/crew/compare/v0.9.0...v0.9.1) (2026-05-07)
 
 
