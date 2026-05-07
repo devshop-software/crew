@@ -1,3 +1,10 @@
+## [0.9.1](https://github.com/devshop-software/crew/compare/v0.9.0...v0.9.1) (2026-05-07)
+
+
+### Bug Fixes
+
+* **prep:** workspace-aware project-root resolution ([51b13c2](https://github.com/devshop-software/crew/commit/51b13c2d053e6435862f474e9cda339e5ff0da54))
+
 # [0.9.0](https://github.com/devshop-software/crew/compare/v0.8.1...v0.9.0) (2026-05-07)
 
 
