@@ -1,3 +1,10 @@
+## [0.11.1](https://github.com/devshop-software/crew/compare/v0.11.0...v0.11.1) (2026-05-09)
+
+
+### Bug Fixes
+
+* **indie-agent:** timestamp workflow folders, commit progress log on run-done ([c9c8c35](https://github.com/devshop-software/crew/commit/c9c8c35c00c080f363c33c62595d6440b446547e))
+
 # [0.11.0](https://github.com/devshop-software/crew/compare/v0.10.1...v0.11.0) (2026-05-09)
 
 
