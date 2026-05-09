@@ -1,3 +1,10 @@
+# [0.11.0](https://github.com/devshop-software/crew/compare/v0.10.1...v0.11.0) (2026-05-09)
+
+
+### Features
+
+* **skills:** qa-v2 — journey-scope coverage map, leaner skill text ([d6342a0](https://github.com/devshop-software/crew/commit/d6342a066579047921041829cf75e45cbdb840fb))
+
 ## [0.10.1](https://github.com/devshop-software/crew/compare/v0.10.0...v0.10.1) (2026-05-09)
 
 
