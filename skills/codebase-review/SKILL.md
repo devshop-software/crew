@@ -19,11 +19,7 @@ Activate when called from the `/audit` command. Otherwise ignore.
 
 ## Input Handling
 
-`$ARGUMENTS` may be:
-
-- **Empty** (most common) — full codebase audit across all five dimensions
-- **A dimension name** (e.g. `security`, `testing`, `infrastructure`, `code-health`, `dependencies`) — audit only that dimension
-- **A path** to a directory — scope the audit to a specific area of the codebase
+Take whatever was passed: empty for a full audit across all five dimensions, a dimension name (`security`, `testing`, `infrastructure`, `code-health`, `dependencies`) for one slice, or a directory path to scope to part of the codebase.
 
 ---
 

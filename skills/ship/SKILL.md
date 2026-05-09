@@ -19,11 +19,7 @@ Activate when called from the `/ship` command. Otherwise ignore.
 
 ## Input Handling
 
-`$ARGUMENTS` may be:
-
-- A **folder name** (e.g. `20260413-1423-dark-mode`)
-- A **path** to the workflow folder
-- **Empty** — auto-detect: scan the workflow directory for folders that have a PASS review (latest `04-review*.md` with PASS verdict) but no PR yet created. If exactly one exists, use it. If multiple, list and ask.
+Take whatever was passed — workflow folder name, path, or empty to auto-detect (one folder with a PASS review and no PR yet; ask if multiple).
 
 ---
 

@@ -19,11 +19,7 @@ Activate when called from the `/review` command. Otherwise ignore.
 
 ## Input Handling
 
-`$ARGUMENTS` may be:
-
-- A **folder name** (e.g. `20260413-1423-dark-mode`)
-- A **path** to the workflow folder
-- **Empty** — auto-detect: scan the workflow directory for folders that have `02-implementation.md` and (ideally) `03-qa.md` but no `04-review.md`. If exactly one exists, use it. If multiple, list and ask. If none, tell the user there are no implementations ready for review.
+Take whatever was passed — workflow folder name, path, or empty to auto-detect (one folder with `02-implementation.md` and ideally `03-qa.md` but no `04-review.md`; ask if multiple).
 
 ---
 

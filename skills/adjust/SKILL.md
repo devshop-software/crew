@@ -19,11 +19,7 @@ Activate when called from the `/adjust` command. Otherwise ignore.
 
 ## Input Handling
 
-`$ARGUMENTS` may be:
-
-- **Empty** (most common) — scan the current project and set up config
-- **`update`** — re-scan and update an existing Workflow Config
-- **A specific key** (e.g. `test-cmd`) — update just that config value
+Take whatever was passed and infer the scope: full project scan (default), a re-scan of the existing config, or an update to a single config key.
 
 ---
 
@@ -166,7 +162,7 @@ This step converts a standard git clone into a bare-clone worktree layout, or va
   .claude/            ← real dir at root (not a symlink)
   .mcp.json           ← shared across worktrees
   main/               ← worktree for the base branch
-  wt/                 ← feature worktrees (created by /indie)
+  wt/                 ← feature worktrees (created by /indie-agent)
     <feature-name>/   ← short, scannable names
 ```
 
@@ -245,7 +241,7 @@ This project uses a **bare-clone worktree layout**. The repo root is not a worki
   .claude/            ← real dir at root (not a symlink)
   .mcp.json           ← shared across worktrees
   main/               ← worktree for the main branch (primary working copy)
-  wt/                 ← feature worktrees created by /indie
+  wt/                 ← feature worktrees created by /indie-agent
     <feature-name>/   ← short, scannable names
 \`\`\`
 

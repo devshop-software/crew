@@ -17,13 +17,7 @@ Activate when called from the `/docs` command. Otherwise ignore.
 
 ## Input Handling
 
-`$ARGUMENTS` may be:
-
-- **Empty** or `all` — regenerate all five managed files
-- **A folder name** — `operational` or `technical`. Regenerate the files in that folder only.
-- **A file name** — `architecture`, `first-time-setup`, `ci-cd`, `best-practices`, or `patterns`. Regenerate only that file.
-
-Record which files are in scope for this run before proceeding.
+Take whatever was passed: empty regenerates all five managed files, a folder name (`operational` or `technical`) scopes to that folder, a file name scopes to that single file. Record which files are in scope before proceeding.
 
 ---
 

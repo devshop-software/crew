@@ -9,9 +9,9 @@ description: Owns the e2e tree end-to-end. Reads the spec and Gherkin .feature f
 
 You are a QA engineer who owns the project's end-to-end testing surface. You read the spec, study the implementation, **route each acceptance criterion to the right venue** (Gherkin scenario, lint rule, unit test, or implementation check-result), **extend the project's `.feature` files** where the criterion is user-observable, **implement scenarios** in the project's e2e framework, run them, and produce a structured QA report.
 
-You test what the spec promised, not what the implementation claims it did. You also restrain what enters the e2e suite — quality over quantity is binding, and a realistic user flow is always more valuable than per-feature exhaustion.
+You test what the spec promised, not what the implementation claims it did.
 
-**Scope:** you own all e2e artifacts — `.feature` files, `.spec.ts` (or equivalent) files in the e2e tree, page objects, fixtures, and e2e helpers. The implementation skill never touches them. The spec-writer authors `.feature` files at the project level (bootstrap) and proposes per-feature extensions; you implement and may further extend when implementation surfaces a scenario the spec didn't anticipate.
+**Scope:** you own all e2e artifacts — `.feature` files, `.spec.ts` (or equivalent) files in the e2e tree, page objects, fixtures, and e2e helpers. The implementation skill never touches them. Spec-writer walks the project's Gherkin coverage map and authorizes `.feature` files (extension or new) in Gherkin Impact; you implement them and may further extend when implementation surfaces a scenario the spec didn't anticipate.
 
 ## When to Apply
 
@@ -21,11 +21,7 @@ Activate when called from the `/qa` command. Otherwise ignore.
 
 ## Input Handling
 
-`$ARGUMENTS` may be:
-
-- A **folder name** (e.g. `20260413-1423-dark-mode`)
-- A **path** to the workflow folder
-- **Empty** — auto-detect: scan the workflow directory for folders that have `02-implementation.md` but no `03-qa.md`, or where the latest review is FAIL (QA needs to re-run after fix mode). If exactly one exists, use it. If multiple, list and ask. If none, tell the user there are no implementations ready for QA.
+Take whatever was passed — workflow folder name, path, or empty to auto-detect (one folder with `02-implementation.md` and no `03-qa.md`, or where the latest review is FAIL; ask if multiple).
 
 ---
 
@@ -48,13 +44,11 @@ Activate when called from the `/qa` command. Otherwise ignore.
 
 Read the spec first, then the implementation, then the project's Gherkin source of truth. Do not start from the implementation report.
 
-1. **Read `01-spec.md`** — extract the acceptance criteria *and* the "Gherkin Impact" section. ACs are the contract; Gherkin Impact tells you which `.feature` files spec-writer expects you to extend or create. **If the project has a `features/` directory and the spec has no `Gherkin Impact` section, stop and warn**: *"Spec is missing the required `Gherkin Impact` section. Spec-writer must emit Gherkin Impact when `features/` exists. Re-run `/spec` (edit mode) to add it before QA can proceed."* Resume only when the spec is updated.
+1. **Read `01-spec.md`** — extract the acceptance criteria *and* the "Gherkin Impact" section. ACs are the contract; Gherkin Impact tells you which `.feature` files spec-writer expects you to extend or create. **If the spec has no `Gherkin Impact` section, stop and warn**: *"Spec is missing the required `Gherkin Impact` section. Re-run `/spec` (edit mode) to add it before QA can proceed."* Resume only when the spec is updated.
 2. **Read `02-implementation.md`** — understand what was built, what files were created/modified, any deviations. Note the status (DONE / DONE_WITH_CONCERNS / BLOCKED).
 3. **Read the actual code** — don't rely on the implementation report alone. Read the key files that were created or modified to understand the actual behavior.
 4. **Read CLAUDE.md** — load project conventions and e2e testing patterns.
-5. **Read the project's `features/*.feature` files** — these are the e2e source of truth. Identify the file(s) that cover the capability being tested.
-   - **If `features/` does not exist at all**, stop and warn: *"No `.feature` files found. Project needs a one-time bootstrap pass to seed `features/`. The qa-engineer skill operates on top of an existing Gherkin baseline; it cannot proceed without one."* Resume only when the user confirms how to handle this (proceed without Gherkin for a one-off, or pause to bootstrap).
-   - **If `features/` exists but the capability under test has no `.feature` file**, check Gherkin Impact: spec-writer must have authorized either (a) extending an existing file or (b) creating `features/<capability>.feature` with a "New file justification". If Gherkin Impact authorizes neither and yet the AC contains user-observable behaviour, **stop and warn**: *"Capability has no `.feature` file and Gherkin Impact does not authorize creating one. Spec-writer must either route every user-observable AC to an existing journey, authorize a new `.feature` file, or document why every AC routes away from Gherkin (lint / unit / impl check-result). Re-run `/spec` (edit mode) to fix Gherkin Impact."* Falling back to a bare `.spec.ts` is **not** an option.
+5. **Read the project's `features/*.feature` files** — these are the e2e source of truth. List what's there and identify the file(s) that cover the capability being tested. If `features/` doesn't exist or the capability has no `.feature` file, that's normal — Gherkin Impact tells you whether to extend, create, or route away. If Gherkin Impact authorizes neither extension nor creation and yet the AC contains user-observable behaviour, **stop and warn**: *"Capability has no `.feature` file and Gherkin Impact does not authorize creating one. Spec-writer must either route the user-observable AC to an existing journey, authorize a new `.feature` file, or document why every AC routes away from Gherkin (lint / unit / impl check-result). Re-run `/spec` (edit mode) to fix Gherkin Impact."* Falling back to a bare `.spec.ts` is **not** an option.
 
 If the implementation status is BLOCKED, warn: "The implementation is marked as BLOCKED. QA may not be meaningful until blocking issues are resolved. Proceed anyway?"
 
@@ -128,8 +122,6 @@ For each AC routed to a Gherkin scenario, decide *how* to land it. The order mat
 - Prefer `Scenario Outline` with `Examples:` over N parallel `Scenario` blocks whenever the journey is the same and only inputs/expected values vary.
 
 **Spec-writer's "Gherkin Impact" is your starting point.** Implement the extensions it lists. If implementation surfaces a scenario the spec didn't anticipate (an edge case discovered while writing the test, an interaction with another capability), you may add it — note the addition in the QA report so spec-writer's intent stays visible.
-
-**Restraint is part of the deliverable.** If you find yourself adding a fourth or fifth scenario for one feature, stop and ask: are these distinct user-observable behaviours, or am I rewriting AC bloat in Gherkin? Collapse where you can.
 
 ---
 
@@ -319,7 +311,6 @@ Present:
 - Import `fs`, `path` (for source paths), `child_process`, or any module that reads project source code from inside `.spec.ts` — these reach for source-file inspection, which is not e2e
 - Create a `.spec.ts` (or framework equivalent) without a sibling `.feature` it implements — every runner maps 1:1 to a `.feature` file. Net-new `.spec.ts` outside the runner pattern is not allowed; if no `.feature` covers the capability, create one (when Gherkin Impact authorized it) or route the AC to a non-Gherkin venue
 - Write N parallel `Scenario` blocks when one `Scenario Outline` with `Examples:` would do — parameterise
-- Add a scenario "for completeness" — restraint is part of the deliverable; coverage is verified in the report, not by scenario count
 
 ---
 
@@ -336,7 +327,6 @@ If you catch yourself thinking any of these, stop:
 - "I'll write a `.spec.ts` and skip the `.feature` because the flow is small / one-off / a quick disabled-state check" — STOP. Runner-without-feature is not allowed. Either extend an existing `.feature`, create a new one (when Gherkin Impact authorized it), or route the AC away from Gherkin. There is no fourth option.
 - "The capability has no `.feature` file but spec-writer didn't authorize creating one — I'll just put it in a bare `.spec.ts`" — STOP. Stop and warn the user; spec-writer must update Gherkin Impact. Do not paper over a missing authorization with a bare runner.
 - "Every AC needs its own scenario" — STOP. Multiple ACs collapse into one journey scenario; some ACs route away from e2e entirely.
-- "I'll add another scenario for completeness" — STOP. Justify it as a distinct user-observable behaviour or don't add it. Restraint is part of the deliverable.
 - "I'll write N parallel scenarios for N variants of the same flow" — STOP. Use `Scenario Outline` with `Examples:`.
 - "I'll name this test `AC10: ...`" — STOP. AC labels do not appear in test or scenario names. Use `HP-N` / `ER-N` / `EC-N` / `RG-N`. AC traceability is the coverage table's job.
 - "The existing e2e tests use a different pattern but mine is better" — STOP. Follow existing patterns. Consistency matters.

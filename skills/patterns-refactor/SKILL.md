@@ -17,13 +17,7 @@ Activate when called from the `/refactor` command. Otherwise ignore.
 
 ## Input Handling
 
-`$ARGUMENTS` may be:
-
-- **Empty** — enter analyze mode: scan the codebase for bad patterns and produce a report
-- **`analyze`** — same as empty, explicit analyze mode
-- **`analyze <path>`** — analyze mode scoped to a directory
-- **A pattern description** (free text) — enter refactor mode: find all instances of this pattern and fix them. Example: `"API calls use raw fetch with try/catch instead of a wrapper function"`
-- **A reference to an analysis report entry** — enter refactor mode for a specific finding. Example: `"#3 from codebase patterns report"` or a path to a report file
+Take whatever was passed and infer the mode: empty or a directory path runs analyze mode (scan the codebase for bad patterns and write a report); a pattern description or a reference to an analysis report entry runs refactor mode (find all instances and fix them).
 
 ---
 

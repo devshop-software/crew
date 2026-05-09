@@ -21,11 +21,7 @@ Activate when called from the `/implement` command. Otherwise ignore.
 
 ## Input Handling
 
-`$ARGUMENTS` may be:
-
-- A **folder name** (e.g. `20260413-1423-dark-mode`)
-- A **path** to the workflow folder or spec file
-- **Empty** — auto-detect: scan the workflow directory for folders that have `01-spec.md` but no `02-implementation.md`. If exactly one exists, use it. If multiple, list them and ask. If none, tell the user there are no unimplemented specs.
+Take whatever was passed — workflow folder name, path to the folder or spec file, or empty to auto-detect (one folder with `01-spec.md` and no `02-implementation.md`; ask if multiple).
 
 ---
 
