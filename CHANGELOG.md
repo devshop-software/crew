@@ -1,3 +1,10 @@
+## [0.10.1](https://github.com/devshop-software/crew/compare/v0.10.0...v0.10.1) (2026-05-09)
+
+
+### Bug Fixes
+
+* **skills:** close per-feature .feature ban loophole; mandate Gherkin Impact ([46eb47b](https://github.com/devshop-software/crew/commit/46eb47b932b6a4be90547c76f2b72324c2f0f09a)), closes [#53](https://github.com/devshop-software/crew/issues/53)
+
 # [0.10.0](https://github.com/devshop-software/crew/compare/v0.9.1...v0.10.0) (2026-05-07)
 
 
