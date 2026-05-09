@@ -58,9 +58,9 @@ The input may include a natural-language breakpoint instruction like "stop after
 
 ## Step 1W — Worktree Setup (new features only)
 
-1. **Derive the folder name:** Short, scannable kebab-case name (2–5 words) derived from the input. No timestamp prefix in the directory name. Example: `dark-mode`, `auth-refactor`, `db-seed-script`
-2. **Derive the branch name:** `<branch-prefix>YYYYMMDD-HHMM-<folder-name>` using the current timestamp. Example: `feature/20260413-1423-dark-mode`. The timestamp lives in the branch name, not the directory.
-3. **Determine the worktree path:** `../../wt/<folder-name>` — inside the `wt/` subdirectory at the project root. Example: if you're running from `~/projects/rival.sale/main`, the worktree goes to `~/projects/rival.sale/wt/dark-mode`.
+1. **Derive the folder name:** `YYYYMMDD-HHMM-<kebab>` using the current local timestamp + a short kebab-case description (2–5 words) derived from the input. Example: `20260509-1932-competitor-monitoring-toggle`. The timestamped form is the single name used for the workflow folder, the worktree directory, and the branch suffix — folders sort chronologically when listed.
+2. **Derive the branch name:** `<branch-prefix><folder-name>`. Example: `feature/20260509-1932-competitor-monitoring-toggle`.
+3. **Determine the worktree path:** `../../wt/<folder-name>` — inside the `wt/` subdirectory at the project root. Example: if you're running from `~/projects/rival.sale/main`, the worktree goes to `~/projects/rival.sale/wt/20260509-1932-competitor-monitoring-toggle`.
 4. **Create the worktree:** `mkdir -p ../../wt && git worktree add <worktree-path> -b <branch-name> <base-branch>`
 5. **Copy local environment files:** Copy `.env` (and `.env.local` if it exists) from the current worktree into the new worktree. These are gitignored and won't exist in the fresh checkout.
 6. **Switch context:** all subsequent steps run inside the worktree directory
@@ -445,9 +445,12 @@ Write `05-indie-summary.md` in the workflow folder:
 
 After writing the summary:
 
-1. Stage `05-indie-summary.md`: `git add <workflow-dir>/<folder-name>/05-indie-summary.md`
-2. Commit: `docs: add indie agent run summary for <feature-name>`
-3. Push to the same branch
+1. Append a final `[orchestrator] <ISO-8601 UTC> — run done` line to `<workflow-dir>/<folder-name>/_progress.log`.
+2. Stage both the summary and the progress log: `git add <workflow-dir>/<folder-name>/05-indie-summary.md <workflow-dir>/<folder-name>/_progress.log`
+3. Commit: `docs: add indie agent run summary for <feature-name>`
+4. Push to the same branch
+
+Why both files: ship's own log lines (commit, push, PR creation) are written *after* ship's commit and never make it into the PR otherwise. This step is the catch-all that ensures the full run is recorded in git.
 
 Present the final report to the user: PR URL, check status, iteration counts, and worktree path. Remind: "After merge, clean up with: `git worktree remove <path> && rm -rf <path>`"
 
@@ -462,7 +465,7 @@ Present the final report to the user: PR URL, check status, iteration counts, an
 - Dispatch implementation, QA, and fix-loop phases with `run_in_background: true` so the orchestrator stays responsive
 - Verify the output artifact after every agent returns before proceeding
 - Create a dedicated worktree for each new feature
-- Use short, scannable folder names in `wt/` (timestamp goes in the branch name, not the directory)
+- Timestamp the workflow folder, worktree directory, and branch with the same `YYYYMMDD-HHMM-<kebab>` form so workflows sort chronologically
 - Check artifact state before each phase — never re-run completed phases
 - On "status" queries from the user while a subagent is running, read `_progress.log` — never peek into the subagent's thinking (you can't)
 - Reinforce the progress-log mandate in every phase's task instructions — the log is the only signal the orchestrator has
