@@ -60,7 +60,7 @@ Ask targeted questions in **one batch** (not drip-fed). Choose 3–6 from:
 1. **What's broken / needed** — one sentence in the user's own words, if the rough description was vague.
 2. **Concrete motivating source** — a PR, bug report, dated incident, workflow folder, ticket. "Why now?" This often becomes the brief's strongest paragraph.
 3. **Decisions already made** — what has the user already ruled in or out? These are the non-obvious constraints no code-reading will reveal (e.g. *"we're nuking both DBs before this lands"*).
-4. **Boundary** — where's the edge of this feature? What's adjacent that we want to deliberately leave alone — something a developer might be tempted to also fix here? Ask even if the user didn't mention it; this is where briefs silently fail.
+4. **Boundary** — what's in scope at the edges? Name 2–5 adjacent things (files, capabilities, models, flows) and for each, mark whether this feature touches it or not. Ground every candidate in something concrete you saw in Step 2 — a file path, a table, a flow — not abstract categories. Frame the question to the user as a positive enumeration (*"which of these are in scope?"*), never as negation (*"what's excluded?"*). The Out-of-scope section is derived at draft time from the candidates the user did not mark as in-scope; do not ask the user to enumerate exclusions directly.
 5. **Acceptance shape** — what must be observably true when this is done? 1–3 items, not exhaustive. You'll flesh them out when drafting.
 6. **Post-merge manual steps** — anything a human has to do after the PR merges (DB operations, flag flips, smoke checks)?
 
@@ -232,4 +232,5 @@ If you catch yourself thinking any of these, stop:
 - *"The human section needs more detail to be complete"* — STOP. If a reader can't stop after that section, you've overloaded it. Move the detail to the agent section.
 - *"The acceptance criteria are general on purpose, to leave flexibility"* — STOP. Vague criteria are the #1 reason `/indie-agent` drifts. Be specific.
 - *"This brief is ready — I didn't ask about out-of-scope because the user didn't mention it"* — STOP. Ask. Out-of-scope is where briefs silently fail.
+- *"I'll ask the user to list what's NOT in scope"* or *"I'll show a multi-select of things to exclude"* — STOP. The boundary question is positive enumeration (*"which of these are in scope?"*). Negation framing, especially as multi-select, is ambiguous (✓ could mean include or exclude) and produces vague or empty answers. Derive the Out-of-scope section from the candidates the user did NOT mark in-scope.
 - *"The user stated an outcome and I'm writing a mechanism"* — STOP. If the user said "swap X for Y when Z," that's what the brief says. `useSidebar()`, CSS strategies, component extraction, which file to modify — those are `/spec`'s calls, made after codebase exploration. Pre-deciding them here looks helpful but strips spec-writer's ability to weigh alternatives.
