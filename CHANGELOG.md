@@ -1,3 +1,10 @@
+## [0.11.2](https://github.com/devshop-software/crew/compare/v0.11.1...v0.11.2) (2026-05-12)
+
+
+### Bug Fixes
+
+* **prep:** reshape boundary question as positive in-scope enumeration ([1c3db27](https://github.com/devshop-software/crew/commit/1c3db271a61d8a13cd14f6c24e68201ca980ca7c)), closes [#18](https://github.com/devshop-software/crew/issues/18)
+
 ## [0.11.1](https://github.com/devshop-software/crew/compare/v0.11.0...v0.11.1) (2026-05-09)
 
 
