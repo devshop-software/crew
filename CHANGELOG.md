@@ -1,3 +1,10 @@
+# [0.12.0](https://github.com/devshop-software/crew/compare/v0.11.2...v0.12.0) (2026-05-12)
+
+
+### Features
+
+* **prep:** folder-per-brief + interactive HTML companion ([c3b7a38](https://github.com/devshop-software/crew/commit/c3b7a383ba7e622c6bdcda9bab0085f21d84c9fb))
+
 ## [0.11.2](https://github.com/devshop-software/crew/compare/v0.11.1...v0.11.2) (2026-05-12)
 
 
