@@ -1,5 +1,10 @@
 {
   "name": "crew",
-  "description": "Crew skills as a Claude Code plugin — invoked under the crew: namespace (e.g. crew:ticket).",
-  "version": "0.1.0"
+  "description": "Autonomous, GitHub-issue-driven dev workflow for Claude Code. A looping orchestrator (/crew:run) pulls agent-ready issues and drives each through bundled implementation, qa, reviewer, and mr-review subagents — one MR per ticket, GitHub as the source of truth. Ships /crew:ticket (issue writer) and /crew:adjust (project onboarding).",
+  "version": "0.2.0",
+  "author": {
+    "name": "devshop-software"
+  },
+  "repository": "https://github.com/devshop-software/crew",
+  "license": "MIT"
 }
