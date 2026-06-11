@@ -1,14 +1,14 @@
 {
-  "name": "crew",
+  "name": "devshop",
   "owner": {
     "name": "devshop-software"
   },
   "description": "Project-agnostic Claude Code skills for spec → implement → qa → review → ship.",
   "plugins": [
     {
-      "name": "plan",
-      "source": "./skills/plan",
-      "description": "Turn rough intent into agent-ready, testable GitHub Issues (plan:ticket)."
+      "name": "crew",
+      "source": "./skills/crew",
+      "description": "Turn rough intent into agent-ready, testable GitHub Issues (crew:ticket)."
     }
   ]
 }

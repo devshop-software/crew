@@ -32,14 +32,14 @@ This copies the skills into `./.claude/skills/`, writes a manifest, and appends 
 
 ### Namespaced skills (plugins)
 
-Some skills ship as Claude Code **plugins** so they're invoked under a namespace — e.g. the planning skill is **`/plan:ticket`**. No extra step is needed: `crew init` copies the plugin to `.claude/skills/plan/` (it carries a `.claude-plugin/plugin.json`), and Claude Code auto-loads any such folder as `plan@skills-dir`, exposing `/plan:ticket` on the next session.
+Some skills ship as Claude Code **plugins** so they're invoked under a namespace — e.g. the ticket-writer is **`/crew:ticket`**. No extra step is needed: `crew init` copies the plugin to `.claude/skills/crew/` (it carries a `.claude-plugin/plugin.json`), and Claude Code auto-loads any such folder as `crew@skills-dir`, exposing `/crew:ticket` on the next session.
 
 Prefer Claude Code's own plugin system over the CLI? Install straight from the marketplace instead:
 
 ```sh
 # run inside Claude Code
 /plugin marketplace add devshop-software/crew
-/plugin install plan@crew
+/plugin install crew@devshop
 ```
 
 ## Commands

@@ -37,23 +37,23 @@ test('marketplace.json is well-formed and every plugin source is a real plugin',
   }
 });
 
-test('plan plugin namespaces its skill as plan:ticket', () => {
-  const planDir = path.join(REPO, 'skills', 'plan');
-  const pj = readJson(path.join(planDir, '.claude-plugin', 'plugin.json'));
-  assert.equal(pj.name, 'plan', 'plugin is named "plan"');
+test('crew plugin namespaces its skill as crew:ticket', () => {
+  const crewDir = path.join(REPO, 'skills', 'crew');
+  const pj = readJson(path.join(crewDir, '.claude-plugin', 'plugin.json'));
+  assert.equal(pj.name, 'crew', 'plugin is named "crew"');
   assert.match(pj.name, NAME_RE);
 
-  const skillMd = path.join(planDir, 'skills', 'ticket', 'SKILL.md');
-  assert.ok(fs.existsSync(skillMd), 'plan plugin contains skills/ticket/SKILL.md');
+  const skillMd = path.join(crewDir, 'skills', 'ticket', 'SKILL.md');
+  assert.ok(fs.existsSync(skillMd), 'crew plugin contains skills/ticket/SKILL.md');
 
   const name = frontmatterName(fs.readFileSync(skillMd, 'utf8'));
   assert.equal(name, 'ticket', 'skill name is the bare "ticket"');
   assert.ok(!name.includes(':'), 'bare skill name carries no colon');
   assert.match(name, NAME_RE, 'skill name is a valid kebab-case identifier');
-  // plugin "plan" + bare skill "ticket"  =>  invoked as  plan:ticket
+  // plugin "crew" + bare skill "ticket"  =>  invoked as  crew:ticket
 });
 
-test('crew init copies the plan plugin over intact (skills-dir plugin contract)', () => {
+test('crew init copies the crew plugin over intact (skills-dir plugin contract)', () => {
   const dir = mkTmp();
   try {
     mkProject(dir);
@@ -61,14 +61,14 @@ test('crew init copies the plan plugin over intact (skills-dir plugin contract)'
     assert.equal(r.code, 0, r.stderr);
 
     // A folder under .claude/skills/ that contains .claude-plugin/plugin.json
-    // auto-loads as <name>@skills-dir, so its skills resolve as plan:ticket.
-    const dst = path.join(dir, '.claude', 'skills', 'plan');
+    // auto-loads as <name>@skills-dir, so its skills resolve as crew:ticket.
+    const dst = path.join(dir, '.claude', 'skills', 'crew');
     const manifest = path.join(dst, '.claude-plugin', 'plugin.json');
     const skillMd = path.join(dst, 'skills', 'ticket', 'SKILL.md');
 
-    assert.ok(fs.existsSync(manifest), 'plugin manifest landed in .claude/skills/plan/.claude-plugin/');
-    assert.ok(fs.existsSync(skillMd), 'nested skill landed in .claude/skills/plan/skills/ticket/');
-    assert.equal(readJson(manifest).name, 'plan', 'copied manifest still names the plan namespace');
+    assert.ok(fs.existsSync(manifest), 'plugin manifest landed in .claude/skills/crew/.claude-plugin/');
+    assert.ok(fs.existsSync(skillMd), 'nested skill landed in .claude/skills/crew/skills/ticket/');
+    assert.equal(readJson(manifest).name, 'crew', 'copied manifest still names the crew namespace');
     assert.equal(frontmatterName(fs.readFileSync(skillMd, 'utf8')), 'ticket', 'copied skill keeps its bare name');
   } finally {
     rmTmp(dir);

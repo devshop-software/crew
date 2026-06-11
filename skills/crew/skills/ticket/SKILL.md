@@ -1,6 +1,6 @@
 ---
 name: ticket
-description: "Interactive ticket-writer. Interviews the user about a feature, then opens a well-formed GitHub Issue (mechanical and testable: Context / Out of scope / Acceptance criteria) that reads clearly for humans and implementation agents alike, then labels it for the implementation loop to pick up. Project conventions are read from CLAUDE.md at runtime — the skill contains no project-specific knowledge. Use when the user invokes /plan:ticket."
+description: "Interactive ticket-writer. Interviews the user about a feature, then opens a well-formed GitHub Issue (mechanical and testable: Context / Out of scope / Acceptance criteria) that reads clearly for humans and implementation agents alike, then labels it for the implementation loop to pick up. Project conventions are read from CLAUDE.md at runtime — the skill contains no project-specific knowledge. Use when the user invokes /crew:ticket."
 ---
 
 # Ticket
@@ -17,7 +17,7 @@ The output is a GitHub Issue — it lands in a reviewable queue that humans tria
 
 ## When to Apply
 
-Activate when called from the `/plan:ticket` command. Otherwise ignore.
+Activate when called from the `/crew:ticket` command. Otherwise ignore.
 
 ---
 
@@ -134,7 +134,7 @@ Then ask: _"Want to tweak anything before the loop picks this up?"_ If the user 
 
 - Embed project-specific tool, framework, or package-manager names into this skill file. It must work in any repo that has a `CLAUDE.md`.
 - Prescribe mechanisms (hooks, CSS utilities, component layout, which file to edit) unless the user explicitly committed to one in the interview. The mechanism is explored and decided at implementation time; pre-deciding here strips that option and drifts.
-- Skip the interview. The point of `/plan:ticket` is to extract what only the user knows.
+- Skip the interview. The point of `/crew:ticket` is to extract what only the user knows.
 - Explore the codebase to implementation depth. Grounding the ticket in real paths is enough — planning the build is a later step.
 - Open a second issue when refining — edit the existing one.
 

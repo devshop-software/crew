@@ -1,0 +1,5 @@
+{
+  "name": "crew",
+  "description": "Crew skills as a Claude Code plugin — invoked under the crew: namespace (e.g. crew:ticket).",
+  "version": "0.1.0"
+}
