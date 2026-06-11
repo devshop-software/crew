@@ -3,11 +3,11 @@
   "owner": {
     "name": "devshop-software"
   },
-  "description": "Project-agnostic Claude Code skills for spec → implement → qa → review → ship.",
+  "description": "Project-agnostic Claude Code skills, shipped as plugins.",
   "plugins": [
     {
       "name": "crew",
-      "source": "./skills/crew",
+      "source": "./crew",
       "description": "Turn rough intent into agent-ready, testable GitHub Issues (crew:ticket)."
     }
   ]
