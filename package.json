@@ -6,6 +6,7 @@
     "crew": "scripts/cli.js"
   },
   "files": [
+    ".claude-plugin/",
     "skills/",
     "templates/",
     "scripts/",
