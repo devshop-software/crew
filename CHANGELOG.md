@@ -1,3 +1,10 @@
+# [0.14.0](https://github.com/devshop-software/crew/compare/v0.13.0...v0.14.0) (2026-06-11)
+
+
+### Features
+
+* **plugin:** rename plan plugin to crew (crew:ticket), marketplace to devshop ([da4d93a](https://github.com/devshop-software/crew/commit/da4d93aad3ac43c518099f813b392bb355eb98e3))
+
 # [0.13.0](https://github.com/devshop-software/crew/compare/v0.12.0...v0.13.0) (2026-06-11)
 
 
