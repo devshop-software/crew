@@ -30,6 +30,18 @@ To pull newer skill content later, run `pnpm exec crew update`. The flow:
 
 This copies the skills into `./.claude/skills/`, writes a manifest, and appends a `## Workflow Config` block to `CLAUDE.md` (creating it if absent).
 
+### Namespaced skills (plugins)
+
+Some skills ship as Claude Code **plugins** so they're invoked under a namespace — e.g. the planning skill is **`/plan:ticket`**. No extra step is needed: `crew init` copies the plugin to `.claude/skills/plan/` (it carries a `.claude-plugin/plugin.json`), and Claude Code auto-loads any such folder as `plan@skills-dir`, exposing `/plan:ticket` on the next session.
+
+Prefer Claude Code's own plugin system over the CLI? Install straight from the marketplace instead:
+
+```sh
+# run inside Claude Code
+/plugin marketplace add devshop-software/crew
+/plugin install plan@crew
+```
+
 ## Commands
 
 ```
