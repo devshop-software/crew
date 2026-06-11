@@ -1,3 +1,10 @@
+# [0.13.0](https://github.com/devshop-software/crew/compare/v0.12.0...v0.13.0) (2026-06-11)
+
+
+### Features
+
+* **plan:** namespace ticket as plan:ticket via a plugin marketplace ([95affac](https://github.com/devshop-software/crew/commit/95affac6d7f19d050fe1e6e3cb9e19850039015c))
+
 # [0.12.0](https://github.com/devshop-software/crew/compare/v0.11.2...v0.12.0) (2026-05-12)
 
 
