@@ -140,7 +140,7 @@ MINOR issues alone never cause a FAIL. The verdict is binary — there is no "co
 
 ## Step 9 — Post the verdict as an MR comment
 
-Flush your work to a single MR comment (write the body to a `mktemp` file, then `gh pr comment <number> --body-file <tmpfile>`). Use this structure:
+Flush your work to a single MR comment (write the body to a `mktemp` file, then `gh pr comment <number> --body-file <tmpfile>`). For `<N>`, use the **round number `R`** the orchestrator passed in the dispatch, and **always** this exact header — never "fix-round re-review" or any other variant. Consistent `Round R` headers are what the resume logic and the human read. Use this structure:
 
 ```markdown
 ## crew:reviewer — Round <N> — Verdict: **PASS** | **FAIL**
@@ -203,7 +203,7 @@ If a prior `crew:reviewer` comment exists on this MR, this is round N (> 1), aft
 4. Hunt for **regressions** the fix introduced and **new** issues now visible.
 5. State explicitly, per prior issue: resolved vs still-open. Apply the **same standard** as round 1 — leniency on a later round ships bugs.
 
-You do not track or enforce the round cap; the orchestrator owns the round budget and escalation. You just render the round's verdict honestly.
+You do not track or enforce the round cap; the orchestrator owns the round budget and escalation. It also gives you the round number `R` — use it in your header verbatim (`## crew:reviewer — Round R`); do not compute it by counting comments, and never relabel a re-review as anything but `Round R`. You just render the round's verdict honestly.
 
 ---
 

@@ -106,7 +106,7 @@ If the stack can't be brought up, treat it like a blocker: comment, park the car
 Dispatch `crew:implementation` in **normal mode**. This first run is the only one that creates the branch's remote and opens the MR.
 
 - Task: read **issue #<n> as the spec**, explore the code, implement, write unit tests, run the project's checks. On this first run: push the branch, then `gh pr create --draft` with a body containing `Closes #<n>`. Commit and post an MR comment summarizing what was built.
-- After it returns: confirm an open MR now exists for the branch (`gh pr list --head <branch> --json number,url,isDraft`). Capture the MR number/URL. Confirm a fresh MR comment from the implementation agent.
+- After it returns: confirm an open MR now exists for the branch (`gh pr list --head <branch> --json number,url,isDraft`). Capture the MR number/URL. **Verify the MR will auto-close the ticket** — `gh pr view <mr> --json closingIssuesReferences` must list #<n>; if it doesn't, the `Closes #<n>` keyword is missing or malformed in the body, so re-dispatch implementation to fix the MR body before proceeding. Confirm a fresh MR comment from the implementation agent.
 - **Breakpoint `implement`** → pause here.
 
 ### Step 8 — Dispatch qa
@@ -127,16 +127,16 @@ Dispatch `crew:reviewer`.
 - **PASS →** go to Step 10 (mr-review).
 - **FAIL →** enter the fix loop below.
 
-**Fix loop (cap: 3 rounds).** Triggered by a reviewer FAIL. **Maximum 3 rounds.** Count rounds by the number of reviewer FAIL comments on this MR.
+**Fix loop (cap: 3 fix rounds).** Triggered by a reviewer **FAIL** or a **red required check on the MR** (Step 9b). **Maximum 3 fix rounds across all triggers** — reviewer FAIL, red CI, and the mr-review CRITICAL bounce all draw from this one budget. **You own the counters:** keep a monotonic **fix-round number `F`** (incremented on every fix-mode dispatch, any trigger) and a **review-round number `R`** (incremented on every `crew:reviewer` dispatch), and pass the current value into each dispatch so the agents label their comments consistently — don't let them recount.
 
 Each round:
 
-1. Dispatch `crew:implementation` in **fix mode** — scoped to the reviewer's findings only. Task: read the latest reviewer MR comment (and the `progress_log` if present), fix **only** what was flagged, commit to the same branch, post an MR comment. Do not re-implement the feature.
+1. Dispatch `crew:implementation` in **fix mode** (pass it `fix round F`) — scoped to the findings only. Task: read the latest `crew:reviewer` FAIL comment — or, for a CI-triggered round, the orchestrator's CI-failure comment and the linked failing run — (and the `progress_log` if present), fix **only** what was flagged, commit to the same branch, post an MR comment. Do not re-implement the feature.
 2. Re-dispatch `crew:qa` (Step 8).
-3. Re-dispatch `crew:reviewer` (this step).
+3. Re-dispatch `crew:reviewer` (this step), passing it `Round R`.
 4. Read the new verdict:
-   - **PASS →** go to Step 10.
-   - **FAIL →** if fewer than 3 FAILs so far, loop to round N+1; if this was the **3rd** FAIL, **escalate** (below).
+   - **PASS →** go to Step 9b (CI gate), then Step 10.
+   - **FAIL →** if fewer than 3 fix rounds have been spent, loop to the next round (`F`+1); if the cap is reached, **escalate** (below).
 
 **Escalate** (after 3 FAILs):
 - Leave the MR as **draft** — do not flip it.
@@ -145,23 +145,33 @@ Each round:
 - **Do not** delete the `progress_log` (a human will want it). The escalated ticket's worktree **may be left in place** for a human to inspect.
 - **Continue to the next ticket** (loop to Step 2). One stuck ticket never stops the queue.
 
+### Step 9b — CI gate (the diff must be green before mr-review)
+
+CI on the MR runs **asynchronously** and can go red **after** a phase agent already returned (an `upload-artifact` restriction, a workflow that reds every PR, an e2e failure the agent's local run missed). The reviewer's verdict is not the only gate — before advancing past it, gate on the MR's live CI:
+
+1. After a reviewer **PASS**, poll the MR's checks until they **settle**: `gh pr checks <MR> --watch` (or poll `gh pr view <MR> --json statusCheckRollup`).
+2. **All required checks green →** proceed to Step 10 (mr-review) on this stable diff.
+3. **Any required check red →** treat it exactly like a reviewer FAIL. Post an `## orchestrator — CI <kind> failure (fix round F triggered)` comment linking the failing run, then run the Step 9 **fix loop** scoped to the CI failure (`crew:implementation` fix mode with the incremented `F`, re-run `crew:qa` if the failure is test-related, then re-confirm CI). **Same 3-round cap** — a CI failure the agent can't get green within the budget **escalates** like any other.
+
+This is what makes mr-review the genuine last gate: no fix round can land after it, because CI is already green when it runs. If a commit *does* land after mr-review (a late CI fix), **re-dispatch mr-review** (Step 10) on the new diff before finalize.
+
 ### Step 10 — Dispatch mr-review (independent, last gate)
 
-Runs only after a reviewer PASS. Dispatch `crew:mr-review`.
+Runs only after a reviewer PASS **and a green CI gate (Step 9b)** — so it always reviews a stable diff. Dispatch `crew:mr-review`.
 
 - Task: review the **MR diff cold** — code smells, duplication, dead code, leaky abstractions, naming, complexity, test quality. It does **not** read the other agents' comments, the reviewer's verdict, or the `progress_log` — independence is the point. Post an MR comment with its findings.
 - After it returns: read its MR comment.
-  - A **CRITICAL** smell may bounce back to implementation **once**, and that bounce **counts toward the 3-round cap** (treat it like a fix-loop round routed through Step 9, then return here). If the cap is already exhausted, escalate instead.
+  - A **CRITICAL** smell may bounce back to implementation **once**, and that bounce **counts toward the shared 3-round fix cap** (treat it like a fix-loop round routed through Step 9 — increment `F`, then re-confirm CI green per Step 9b and re-dispatch mr-review on the new diff). If the cap is already exhausted, escalate instead.
   - **MAJOR / MINOR** findings are advisory — record them, proceed to Step 11.
 - **Breakpoint `mr-review`** → pause here.
 
 ### Step 11 — Tear down, finalize, and advance
 
-On overall pass (reviewer PASS and mr-review cleared):
+On overall pass (reviewer PASS, **CI green** (Step 9b), and mr-review cleared):
 
 1. **Tear down the stack** you brought up in Step 6 (stop the start command / `docker compose down`, release the issue-derived ports and data namespace).
 2. **Delete the `progress_log`** file (`rm -f <progress_log path>`). GitHub now holds the full record.
-3. **Flip the MR draft → ready-for-review:** `gh pr ready <MR-number>`.
+3. **Flip the MR draft → ready-for-review:** `gh pr ready <MR-number>` — **only with all required checks green**; if CI has run since the Step 9b gate, re-confirm green first and never flip over a red check.
 4. **Move the card → In review** (board only).
 5. **Remove the worktree:** `git worktree remove <worktree-path>` (and `rm -rf` if it lingers). The branch and MR remain on the remote for a human to merge.
 
@@ -181,8 +191,9 @@ On every (re)start, before picking a fresh ticket, reconstruct in-flight state f
    - Implementation comment, no qa comment → resume at **Step 8** (qa).
    - qa comment, no reviewer comment → resume at **Step 9** (reviewer).
    - Latest reviewer comment is **FAIL** → resume in the **fix loop** (Step 9), counting prior FAIL comments toward the cap.
-   - Latest reviewer comment is **PASS**, no mr-review comment → resume at **Step 10** (mr-review).
-   - mr-review comment present and the MR is still draft → resume at **Step 11** (finalize).
+   - Latest reviewer comment is **PASS** but the MR has a **red required check** → resume in the **CI fix loop** (Step 9b), counting prior fix rounds toward the cap.
+   - Latest reviewer comment is **PASS**, CI green, no mr-review comment → resume at **Step 10** (mr-review).
+   - mr-review comment present and the MR is still draft → confirm CI is green and that no commit post-dates the mr-review comment (if one does, re-run Step 9b/10), then resume at **Step 11** (finalize).
 3. **Re-attach the worktree:** if the per-ticket worktree still exists, reuse it; if it was removed but the ticket isn't finalized, recreate it (off the bare clone if present, else the existing checkout) from the existing remote branch (`git worktree add <path> <branch>`). Re-derive the `progress_log` path; **a surviving `progress_log` is a hint, not the truth** — if it disagrees with the MR comments, trust the comments.
 4. **Bring the stack back up** (Step 6) before resuming at any phase that needs it (qa, reviewer); tear it down at finalize.
 5. Finish resuming each in-flight ticket (continue its loop from the resumed phase through Step 11) before Step 2 selects any new `agent-ready` issue.
@@ -216,6 +227,7 @@ Each agent prompt must carry:
 - The **`progress_log` path** — agents append to it as they work and flush it into their MR comment at handoff.
 - The relevant **Workflow Config** values (commands, branch, base branch).
 - For **qa** and **reviewer**: the **running stack's base URL/port** (from Step 6) so they test against the stack you own rather than starting their own.
+- For **fix-mode implementation** and **reviewer** dispatches: the current **round number** you own — `fix round F` for implementation, `Round R` for reviewer (§ Step 9 / Step 9b) — so the comment headers increment consistently across reviewer- and CI-driven rounds. The agents must use the number you give, not recount comments.
 
 > Do **not** inline the agent's instructions here — the agent files own their own behavior. Your prompt supplies context (paths, numbers, config) and the handoff contract, nothing more.
 
@@ -249,7 +261,8 @@ Then stop. Do not poll for new tickets unless re-invoked.
 - **Own the stack lifecycle** — bring the app stack up after the worktree (configured start command + issue-derived isolation, wait for readiness, export the base URL/port), and tear it down when the ticket finishes. Agents never start their own stack.
 - Keep the `progress_log` **outside** the repo, never commit it, and delete it at ready-for-review.
 - Resume from **GitHub** — read MR comments to find the last completed phase; trust them over any surviving `progress_log`.
-- Respect the **3-round cap** on the review fix loop (a CRITICAL mr-review bounce counts toward it).
+- Respect the **shared 3-round fix cap** — reviewer FAIL, red CI (Step 9b), and a CRITICAL mr-review bounce all draw from the one budget; own the `F` / `R` counters and pass them into dispatches.
+- **Gate on live CI** — a red required check on the MR is a fix trigger; mr-review runs only once CI is green, and you never flip to ready-for-review over a red check.
 - Escalate with full context at the cap — leave the MR draft, comment, park the card, and **move on to the next ticket**.
 - Flip the MR to ready-for-review and move the card to In review on overall pass, then **continue without waiting for a human merge**.
 - Run label-only when no board is configured — skip every card move silently.
@@ -277,7 +290,9 @@ If you catch yourself thinking any of these, stop:
 - _"I'll write a quick spec doc for the agent to read"_ — STOP. The **issue is the spec**. There are no numbered docs in V2.
 - _"Let me drop the progress log into the commit so it's saved"_ — STOP. The `progress_log` is out-of-tree and never committed; the durable record is the MR comments.
 - _"The reviewer is being too strict; I'll relax it to avoid another round"_ — STOP. The adversarial stance is the quality gate. Loop or escalate; never soften it.
-- _"This is the 4th round, just one more should fix it"_ — STOP. The cap is 3. Escalate and move to the next ticket.
+- _"This is the 4th round, just one more should fix it"_ — STOP. The cap is 3 fix rounds across all triggers (reviewer FAIL, red CI, mr-review bounce). Escalate and move to the next ticket.
+- _"The reviewer passed, I'll run mr-review right away even though CI is still going"_ — STOP. Wait for the CI gate (Step 9b). mr-review reviews a green, stable diff; a red check is a fix trigger, not something to skip past.
+- _"CI is red but the reviewer passed, I'll flip to ready-for-review anyway"_ — STOP. Never finalize over a red required check. Red CI is a fix round (Step 9b), inside the same 3-round cap.
 - _"This ticket needs a human / is an epic, but I'll try implementing it anyway"_ — STOP. Triage first: skip it with a comment + card move, record it as skipped, and pick the next candidate. The loop only stops when nothing actionable is left.
 - _"qa can just spin the app up itself"_ — STOP. You own the stack. Bring it up in Step 6 with issue-derived isolation, export the URL, and tear it down at finalize.
 - _"The board column is probably called 'Done', I'll just use that"_ — STOP. Read the column names from `## Workflow Config`. Don't guess.

@@ -140,9 +140,9 @@ This is the first dispatch, so **you** open the MR that carries the ticket for t
    `git switch -c crew/<issue#>-<slug>`
 2. Stage and commit your work with a clear message referencing the issue (e.g. `feat: <summary> (#<issue>)`). **Never stage the `progress_log`** — it lives outside the tree.
 3. Push the branch: `git push -u origin crew/<issue#>-<slug>`.
-4. Open the **draft** MR, body containing `Closes #<issue>`:
+4. Open the **draft** MR. **The body MUST start with `Closes #<issue>`** on its own line — that keyword is the link that **auto-closes the ticket when the MR merges**. The issue number in the title (`(#<issue>)`) is for humans and does **not** auto-close; only the keyword in the **body** does.
    `gh pr create --draft --title "<feature title> (#<issue>)" --body "Closes #<issue>"`
-   (Write the body to a `mktemp` file and use `--body-file` if it's more than a line.) Capture the MR URL/number.
+   When the body is more than a line, write it to a `mktemp` file and use `--body-file` — **keep `Closes #<issue>` as the first line of that file.** Then verify the link actually registered: `gh pr view <mr> --json closingIssuesReferences` must list #<issue> (if it doesn't, the keyword is missing or malformed — fix the body). Capture the MR URL/number.
 
 The MR stays **draft** — only the orchestrator flips it to ready-for-review at the very end. You never mark it ready and you never merge.
 
@@ -193,11 +193,11 @@ After posting, your final text response to the orchestrator is the **MR number/U
 
 ## Fix Mode
 
-The orchestrator re-dispatches you in fix mode after `crew:reviewer` returns **FAIL**. Fix mode is **strictly scoped** — you address *only* what the reviewer flagged. You do **not** re-implement the feature.
+The orchestrator re-dispatches you in fix mode after `crew:reviewer` returns **FAIL** *or* after a **red CI check** on the MR. Fix mode is **strictly scoped** — you address *only* what was flagged (the reviewer's findings, or the CI failure the orchestrator named). You do **not** re-implement the feature. The orchestrator gives you the **fix-round number `F`** in the dispatch — use it verbatim; don't recount it from prior comments.
 
-### Step 2F — Read the reviewer's findings from the MR
+### Step 2F — Read the findings to fix (reviewer FAIL or CI failure)
 
-1. Find the MR (`Closes #<issue>`) and read the **newest `crew:reviewer` comment** — that is the FAIL verdict with severity-tagged issues. This comment, not any local file, is the source of what to fix.
+1. Find the MR (`Closes #<issue>`) and read the source of findings the orchestrator pointed you at: for a **reviewer-triggered** round, the **newest `crew:reviewer` comment** (the FAIL verdict with severity-tagged issues); for a **CI-triggered** round, the orchestrator's **`orchestrator — CI … failure`** comment and the **linked failing run** (open its log for the actual error). That comment/run, not any local file, is the source of what to fix.
 2. Read the prior `crew:implementation` comment(s) on the MR to see what was already built, and the issue itself for the original contract.
 3. From the `progress_log` (if it survived) pull back any working context — but treat the reviewer's MR comment as authoritative.
 4. Extract each flagged issue with its severity (CRITICAL / MAJOR / MINOR). Log the fix plan to the `progress_log`.
@@ -218,12 +218,12 @@ In the order the reviewer lists them, highest severity first:
 
 ### Step 5F — Comment the fix round on the MR
 
-Flush a fix-round comment (`gh pr comment <mr> --body-file <tmpfile>`):
+Flush a fix-round comment (`gh pr comment <mr> --body-file <tmpfile>`). Use the fix-round number `F` the orchestrator gave you — it increments across reviewer- and CI-driven rounds alike, so don't recount it from prior comments:
 
 ```markdown
-## crew:implementation — fix round N
+## crew:implementation — fix round F
 
-> Addresses crew:reviewer FAIL (<link to that comment>)
+> Addresses <crew:reviewer FAIL | orchestrator CI failure> (<link to that comment / failing run>)
 
 ### Issues addressed
 1. **<reviewer issue title>** (<severity>) — <what you changed>
@@ -281,3 +281,6 @@ If you catch yourself thinking any of these, stop:
 - _"In fix mode I'll also tidy up this nearby thing."_ — STOP. Fix mode touches only what the reviewer flagged, on the same branch.
 - _"I've gone back and forth on this fix a few times, one more try."_ — COUNT. If that's attempt 3, stop and escalate via the comment as BLOCKED.
 - _"I'll open a fresh MR for the fix."_ — STOP. One MR per ticket. Commit to the existing branch.
+- _"Fix mode means a reviewer FAIL, so I'll go read the reviewer comment."_ — STOP. Fix mode is also triggered by **red CI**. If the orchestrator dispatched you for a CI failure, the source is its `orchestrator — CI … failure` comment + the failing run log, not a reviewer verdict.
+- _"I'll number this fix round myself."_ — STOP. The orchestrator owns the fix-round number `F` and passes it in; use it verbatim so reviewer- and CI-driven rounds stay consistently numbered.
+- _"The issue number's in the title and I wrote a rich PR body, that's enough to link it."_ — STOP. The title `(#N)` does **not** auto-close. `Closes #<issue>` must be the **first line of the body** (even with `--body-file`); verify `closingIssuesReferences` lists the issue before you hand off.
