@@ -38,7 +38,8 @@ Before touching any ticket, establish that the environment is wired up. Stop wit
    - **Worktree infrastructure:** whether `adjust` set up the **bare-clone layout** (`.bare/` + primary worktree) so per-ticket worktrees fork off the bare clone. If absent, fall back to adding worktrees off the existing checkout.
    - **Stack-run config:** the **start command**, the **readiness check** (health URL / port), and the **isolation scheme** (issue-derived ports / data namespaces) — you own bringing the stack up and down per ticket.
 4. **Parse run options** from the invocation (see Breakpoints): an optional `--breakpoint <phase>` and an optional single-ticket target (`--issue <N>`). Default is no breakpoint, full queue.
-5. **Resume sweep:** before picking anything new, run Resume Detection (below) to find and continue any in-flight ticket. Only once nothing is in flight do you pick a fresh ticket.
+5. **Establish this run's identity.** Set `RUN_ID = <host>:<pid>:<start-epoch>` — `hostname`, this orchestrator's own Claude process PID (e.g. `ps -o ppid= -p $$` resolves the Claude process that owns the shell), and the current epoch. This stamps every ticket you claim so a **parallel** `/crew:run` can tell your in-flight work from its own; hold it for the whole run (§4.13).
+6. **Resume sweep:** before picking anything new, run Resume Detection (below) to find and continue any in-flight ticket — adopting only tickets you own or whose owner is dead (§4.13). Only once nothing is in flight do you pick a fresh ticket.
 
 > If no board is configured, the loop runs **label-only**: there are no card moves; selection and state are driven purely by the `agent-ready` label and MR state. Everywhere below that says "move the card", silently skip it when board-less.
 
@@ -55,7 +56,7 @@ Board-agnostic selection, per the shared contract:
 - **With a board:** the oldest open issue carrying the `agent-ready` label whose board status is **TODO**. Query the Projects-v2 board via `gh` GraphQL (project items filtered to the TODO status), intersect with `gh issue list --label <agent-ready> --state open`, take the oldest by issue number.
 - **Without a board:** `gh issue list --label <agent-ready> --state open --json number,title,createdAt`, oldest-first by creation.
 
-Skip any issue that already has an open `Closes #N` MR — that is in-flight work for the resume path, not a fresh pick. Also skip any issue you have already recorded as **skipped** this run (see Step 3 — Triage) so it isn't re-picked.
+Skip any issue that already has an open `Closes #N` MR — that is in-flight work for the resume path, not a fresh pick. **Also skip any issue whose latest `crew:claim` marker names a live peer orchestrator** (§4.13) — that's another run's in-flight ticket, not yours to pick. Also skip any issue you have already recorded as **skipped** this run (see Step 3 — Triage) so it isn't re-picked.
 
 **If no actionable candidate remains → stop.** Go to the Run Summary. Do not invent work, do not relax the label filter.
 
@@ -77,8 +78,9 @@ If the candidate is **actionable**, fall through to Step 4.
 
 ### Step 4 — Claim the ticket
 
-1. **Move the card → In progress** (board only). This is the claim signal; do it before any heavy work so a parallel run won't double-pick.
-2. Capture the issue body — it is the spec the implementation agent will read. You do **not** parse or restate it; the agent reads it directly. You only hold the issue number and title for branch naming and reporting.
+1. **Move the card → In progress** (board only). The human-visible claim signal; do it before any heavy work.
+2. **Stamp an identity-bearing claim and win the race (§4.13).** The card move alone carries no owner identity, so it can't fence off a **parallel** `/crew:run` — both could read the ticket in TODO and both move it. Post a structured claim marker on the **issue** — `<!-- crew:claim host=<host> pid=<pid> start=<start-epoch> ts=<now> -->` carrying your `RUN_ID` (a short human-readable line alongside it is fine) — then **re-fetch the issue's comments and confirm yours is the *earliest* `crew:claim`** (verify-landed per §4.11). GitHub's monotonic comment IDs are the tiebreak: if an **earlier claim from a different, live** run exists, you **lost the race** — record the issue as skipped-this-run and go back to **Step 2** for the next candidate; do **not** touch its worktree or MR.
+3. Capture the issue body — it is the spec the implementation agent will read. You do **not** parse or restate it; the agent reads it directly. You only hold the issue number and title for branch naming and reporting.
 
 ### Step 5 — Create the per-ticket worktree
 
@@ -196,8 +198,12 @@ On overall pass (reviewer PASS, **CI green** (Step 9b), mr-review cleared, and `
 
 On every (re)start, before picking a fresh ticket, reconstruct in-flight state from **GitHub** (the source of truth), not from disk.
 
-1. **Find in-flight tickets:** open MRs whose body contains `Closes #N` (`gh pr list --state open --json number,headRefName,isDraft,body`), and — if a board is configured — issues sitting in **In progress**. Each such MR is a ticket already underway.
-2. **Determine the last completed phase by reading the MR comments** (`gh pr view <n> --comments` / `gh api`), in order:
+1. **Find in-flight tickets:** open MRs whose body contains `Closes #N` (`gh pr list --state open --json number,headRefName,isDraft,body`), and — if a board is configured — issues sitting in **In progress**. Each such MR is a ticket potentially underway.
+2. **Ownership gate — adopt only what's yours or orphaned (§4.13).** For each in-flight ticket, read its `crew:claim` marker and decide before resuming:
+   - **Owner == your `RUN_ID`** → your own interrupted work → adopt and resume it.
+   - **Owner is a live peer** (same host and `kill -0 <pid>` succeeds; or cross-host with **recent commit/comment activity** or a fresh claim `ts`) → **skip it** — a second live `/crew:run` is working it; it is not yours to touch.
+   - **Owner is dead** (same-host PID gone; or cross-host with **no activity** and a stale claim `ts` past a conservative threshold — set above the longest phase + tolerable stall, cf. FT-9's 7h stall) **or there is no claim marker** (legacy/manual In-Progress) → the ticket is orphaned → adopt it, posting a short `crew:claim` reclaim marker with your `RUN_ID` first. This gate is the FT-16 fix: it turns resume from "adopt anything in-flight" into "adopt only orphans," so two runs never co-write a ticket.
+3. **Determine the last completed phase by reading the MR comments** (`gh pr view <n> --comments` / `gh api`), in order:
    - No implementation comment yet → resume at **Step 7** (implementation).
    - Implementation comment, no qa comment → resume at **Step 8** (qa).
    - qa comment, no reviewer comment → resume at **Step 9** (reviewer).
@@ -206,9 +212,9 @@ On every (re)start, before picking a fresh ticket, reconstruct in-flight state f
    - Latest reviewer comment is **PASS**, CI green, no mr-review comment → resume at **Step 10** (mr-review).
    - mr-review comment present, **no `crew:findings` comment yet**, MR still draft → confirm CI is green and that no commit post-dates the mr-review comment (if one does, re-run Step 9b/10), then resume at **Step 10b** (findings).
    - `crew:findings` comment present and the MR is still draft → resume at **Step 11** (finalize).
-3. **Re-attach the worktree:** if the per-ticket worktree still exists, reuse it; if it was removed but the ticket isn't finalized, recreate it (off the bare clone if present, else the existing checkout) from the existing remote branch (`git worktree add <path> <branch>`). Re-derive the `progress_log` path; **a surviving `progress_log` is a hint, not the truth** — if it disagrees with the MR comments, trust the comments.
-4. **Bring the stack back up** (Step 6) before resuming at any phase that needs it (qa, reviewer); tear it down at finalize.
-5. Finish resuming each in-flight ticket (continue its loop from the resumed phase through Step 11) before Step 2 selects any new `agent-ready` issue.
+4. **Re-attach the worktree:** if the per-ticket worktree still exists, reuse it; if it was removed but the ticket isn't finalized, recreate it (off the bare clone if present, else the existing checkout) from the existing remote branch (`git worktree add <path> <branch>`). Re-derive the `progress_log` path; **a surviving `progress_log` is a hint, not the truth** — if it disagrees with the MR comments, trust the comments.
+5. **Bring the stack back up** (Step 6) before resuming at any phase that needs it (qa, reviewer); tear it down at finalize.
+6. Finish resuming each in-flight ticket (continue its loop from the resumed phase through Step 11) before Step 2 selects any new `agent-ready` issue.
 
 ---
 
@@ -274,6 +280,7 @@ Then stop. Do not poll for new tickets unless re-invoked.
 - **Own the stack lifecycle** — bring the app stack up after the worktree (configured start command + issue-derived isolation, wait for readiness, export the base URL/port), and tear it down when the ticket finishes. Agents never start their own stack.
 - Keep the `progress_log` **outside** the repo, never commit it, and delete it at ready-for-review.
 - Resume from **GitHub** — read MR comments to find the last completed phase; trust them over any surviving `progress_log`.
+- **Claim by identity; respect live peers (§4.13)** — hold a `RUN_ID = host:pid:start`, stamp each claimed ticket with a `crew:claim` marker and win the earliest-claim tiebreak before working it, skip fresh picks a live peer has claimed, and on resume adopt an in-flight ticket only if it's **yours or its owner is dead**. Two `/crew:run` on one repo may run concurrently but must never co-write a ticket.
 - Respect the **shared 3-round fix cap** — reviewer FAIL, red CI (Step 9b), and a CRITICAL mr-review bounce all draw from the one budget; own the `F` / `R` counters and pass them into dispatches.
 - **Gate on live CI** — a red required check on the MR is a fix trigger; mr-review runs only once CI is green, and you never flip to ready-for-review over a red check.
 - Escalate with full context at the cap — leave the MR draft, comment, park the card, and **move on to the next ticket**.
@@ -317,6 +324,7 @@ If you catch yourself thinking any of these, stop:
 - _"This is a big or irreversible call (conflicting MR, work that may already be done, a mistake I just caught) — I'll ask the user which way to go"_ — STOP. You are an **independent** orchestrator; there is no human at the terminal, and `AskUserQuestion` doesn't pause for an answer — it hangs the whole queue. Decide it from the defaults, or — if it's genuinely human-only — **skip-as-blocked / escalate** with a comment and advance. Asking is never one of your moves.
 - _"There's no board, so I can't run"_ — STOP. Board is optional. Fall back to label-only and skip card moves.
 - _"On resume I'll just re-run from implementation to be safe"_ — STOP. Read the MR comments; resume at the first phase that hasn't posted its comment.
+- _"There's an In-Progress ticket with a worktree — I'll resume it"_ — STOP. Check its `crew:claim` marker first (§4.13). If a **live peer** `/crew:run` owns it (same-host PID alive, or recent activity cross-host), it is **not yours** — skip it. Adopt only your own crashed work or a dead owner's orphan, or two live runs collide (FT-16).
 - _"I'll set `isolation: worktree` on the agent so it's clean"_ — STOP. You own one worktree per ticket; per-agent worktrees split the work across trees.
 - _"The user wrote `crew update` once, I should mention the npm flow"_ — STOP. V2 is a plugin only. No npm, no CLI, no distribution references.
 - _"I'll disable the sandbox just for the readiness curl"_ — STOP. `dangerouslyDisableSandbox` prompts a human and stalls the whole autonomous run, even under skip-permissions. Poll sandboxed; work around failures sandboxed (§4.10).
