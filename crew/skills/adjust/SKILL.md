@@ -1,6 +1,6 @@
 ---
 name: adjust
-description: "Onboards a project for the crew loop — scans the structure, detects and validates the test / lint / build / e2e and app-start commands, detects the GitHub remote and optional Projects board, offers a one-time gated bare-clone worktree migration, advises on setup gaps, and writes a Workflow Config block into CLAUDE.md (commands, ticket-source label, board columns incl. a needs-human/blocked column, branch convention, worktree layout, and the stack-run config: start command / readiness check / per-ticket isolation) that every other component reads at runtime. Use when the user invokes /crew:adjust."
+description: "Onboards a project for the crew loop — scans the structure, detects and validates the test / lint / build / e2e and app-start commands, detects the GitHub remote and optional Projects board, offers a one-time gated bare-clone worktree migration, advises on setup gaps, and writes a Workflow Config block into CLAUDE.md (commands, ticket-source label, board columns incl. a needs-human/blocked and a done column, the merge-approval label and merge method, branch convention, worktree layout, and the stack-run config: start command / readiness check / per-ticket isolation) that every other component reads at runtime. Use when the user invokes /crew:adjust."
 ---
 
 # Adjust
@@ -119,6 +119,11 @@ The loop picks up open issues carrying an agent-ready label. Default: **`agent-r
 - Check whether it exists: `gh label list --search agent-review`. If the project uses a different convention, ask and substitute.
 - Record the chosen name as `agent-review-label`. (Offer to create the label in Step 9.)
 
+### 5a-3 — The merge-approval label
+`/crew:merge` lands MRs a human has green-lit. The green-light is a **label**, not a GitHub Approval — **GitHub blocks a PR's author from approving their own PRs**, so an Approval can't be used when the crew authors and merges under one identity. Default: **`approved`** (an author *can* add a label to their own PR).
+- Check whether it exists: `gh label list --search approved`. If the project uses a different convention (e.g. `ready-to-merge`), ask and substitute.
+- Record the chosen name as `merge-approval-label`. (Offer to create it in Step 9.)
+
 ### 5b — The board (optional)
 A GitHub Projects-v2 board is **optional**. If present, the loop reads and moves cards through it; if absent, the loop falls back to label-only selection.
 - List boards linked to the repo/owner: `gh project list --owner <owner>` (and ask which one, if several). If the user has no board or doesn't want one, set `board: none` and skip to Step 6 — the loop will run label-only.
@@ -133,6 +138,7 @@ The loop needs four named states. Map each to a real column on the chosen board 
 | `status-in-progress` | `In progress` | where it moves a ticket it's working |
 | `status-in-review` | `In review` | where it parks the finished MR (human merges later) |
 | `status-blocked` | `Blocked` (needs-human) | where it escalates a ticket after the review fix-loop caps out |
+| `status-done` | `Done` | where `/crew:merge` moves a card after its MR is merged |
 
 If the board's real columns differ (e.g. `Backlog` / `Doing` / `Review` / `Needs human`), map to those exact names — the loop drives the board by these strings.
 
@@ -144,6 +150,7 @@ Each ticket gets one branch (one MR per ticket). Capture how branches are named.
 
 - `branch-convention` — default **`crew/<issue#>-<slug>`** (e.g. `crew/142-add-rate-limit`). The `<issue#>` ties the branch to its issue and MR; the `<slug>` is a short kebab-case summary. If the project has an existing convention (check recent branches: `git branch -r --sort=-committerdate | head`), match it and substitute the placeholders.
 - `base-branch` — detect from git: `git symbolic-ref refs/remotes/origin/HEAD` → strip to `main` / `master`. This is what worktrees branch from and what MRs target.
+- `merge-method` — how `/crew:merge` lands an approved MR: **`squash`** (default) / `merge` / `rebase`. Match what the repo allows (`gh api repos/<owner>/<repo> --jq '{squash:.allow_squash_merge,merge:.allow_merge_commit,rebase:.allow_rebase_merge}'`); don't pick a method branch protection forbids.
 
 > The per-ticket **worktree** (one tree per issue, added and removed mid-loop) is created and owned by `/crew:run`, not configured here — adjust only records the *naming* (`branch-convention` / `base-branch`). What adjust *does* own is the one-time **infrastructure** that makes those per-ticket trees clean — the bare-clone layout, set up in Step 6W below (§4.1).
 
@@ -268,13 +275,16 @@ Assemble the full block and show it before writing. Ask **"Does this look right?
 | e2e-framework | `playwright` |
 | agent-ready-label | `agent-ready` |
 | agent-review-label | `agent-review` |
+| merge-approval-label | `approved` |
 | board | `<project number / URL>`  *(or `none`)* |
 | status-todo | `TODO` |
 | status-in-progress | `In progress` |
 | status-in-review | `In review` |
 | status-blocked | `Blocked` |
+| status-done | `Done` |
 | branch-convention | `crew/<issue#>-<slug>` |
 | base-branch | `main` |
+| merge-method | `squash`  *(or `merge` / `rebase`)* |
 | worktree-layout | `bare-clone`  *(or `standard`)* |
 | start-cmd | `docker compose up`  *(or `none`)* |
 | readiness-check | `http://localhost:<port>/health`  *(or a port / log pattern)* |
@@ -304,6 +314,7 @@ After writing, surface (don't auto-fix) the gaps that will bite the loop:
 
 - **No `agent-ready` label yet** — offer to create it: `gh label create <label> --color 0E8A16 --description "Ready for the crew loop"`. The loop needs at least one labeled issue to do anything.
 - **No `agent-review` label yet** — offer to create it: `gh label create <agent-review-label> --color FBCA04 --description "Backlog finding — for human planning"`. `crew:findings` and `/crew:improve` file backlog tickets under it; without the label they can't tag them.
+- **No merge-approval (`approved`) label yet** — offer to create it: `gh label create <merge-approval-label> --color 0E8A16 --description "Approved to merge — /crew:merge will land it"`. Without it, `/crew:merge` has no green-light signal and merges nothing.
 - **No board** — fine; note the loop will run label-only (oldest agent-ready issue first) and won't move cards. Mention a board adds visible TODO → In review tracking and an escalation column.
 - **No e2e framework** — warn: `crew:qa` extends a whole-app e2e suite and has nothing to extend without one. Suggest Playwright or Cypress; don't install it.
 - **No `start-cmd` (stack)** — warn: `crew:qa` (e2e) and `crew:reviewer` (Playwright) need the app running. With `start-cmd: none` they have no live stack to drive; suggest wiring a dev-server or `docker compose` target. Don't fabricate one.
@@ -346,7 +357,7 @@ When invoked with `update` or a specific key:
 
 - Confirm GitHub auth and a default repo (Step 0) before writing anything — the loop is GitHub-driven.
 - Detect commands from actual project files, then **run them** to validate.
-- Capture the full ticket-source contract: `agent-ready-label`, `agent-review-label` (the backlog label `crew:findings` files under), the four board statuses (TODO / In progress / In review / a **needs-human/blocked** column — used by run's triage and escalation), and `branch-convention` — the loop reads exactly these keys.
+- Capture the full ticket-source + merge contract: `agent-ready-label`, `agent-review-label` (the backlog label `crew:findings` files under), `merge-approval-label` (the human go-ahead `/crew:merge` gates on — default `approved`), the board statuses (TODO / In progress / In review / **`status-done`** / a **needs-human/blocked** column), `branch-convention`, and `merge-method` — the loop and `/crew:merge` read exactly these keys.
 - Capture the **stack-run config** (`start-cmd`, `readiness-check`, `port`, `isolation-scheme`) and **validate** it by bringing the stack up under an issue-derived isolation and tearing it down — qa and reviewer depend on a running, isolated stack.
 - Offer the **bare-clone worktree migration** only with explicit consent; record `worktree-layout` either way. Preserve the old repo on migration; never auto-delete it.
 - Present the config for confirmation before writing it.
