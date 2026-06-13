@@ -114,8 +114,8 @@ The loop picks up open issues carrying an agent-ready label. Default: **`agent-r
 - Check whether it already exists: `gh label list --search agent-ready`. If the project uses a different convention, ask and substitute.
 - Record the chosen name as `agent-ready-label`.
 
-### 5a-2 — The review-findings label
-`crew:findings` files the advisory reviewer/mr-review findings as **backlog** tickets under a **separate** label. Default: **`agent-review`** — deliberately distinct from `agent-ready` so these never auto-enter the loop; a human promotes them to `agent-ready` during planning.
+### 5a-2 — The backlog (discovery) label
+`crew:findings` (advisory reviewer/mr-review leftovers) and `/crew:improve` (whole-codebase audit) both file their findings as **backlog** tickets under a **separate** label. Default: **`agent-review`** — deliberately distinct from `agent-ready` so these never auto-enter the loop; a human promotes them to `agent-ready` during planning.
 - Check whether it exists: `gh label list --search agent-review`. If the project uses a different convention, ask and substitute.
 - Record the chosen name as `agent-review-label`. (Offer to create the label in Step 9.)
 
@@ -303,7 +303,7 @@ There is **no `_workflow/` directory and no numbered state docs to scaffold** �
 After writing, surface (don't auto-fix) the gaps that will bite the loop:
 
 - **No `agent-ready` label yet** — offer to create it: `gh label create <label> --color 0E8A16 --description "Ready for the crew loop"`. The loop needs at least one labeled issue to do anything.
-- **No `agent-review` label yet** — offer to create it: `gh label create <agent-review-label> --color FBCA04 --description "Advisory finding from crew review — for human planning"`. `crew:findings` files backlog tickets under it; without the label the findings agent can't tag them.
+- **No `agent-review` label yet** — offer to create it: `gh label create <agent-review-label> --color FBCA04 --description "Backlog finding — for human planning"`. `crew:findings` and `/crew:improve` file backlog tickets under it; without the label they can't tag them.
 - **No board** — fine; note the loop will run label-only (oldest agent-ready issue first) and won't move cards. Mention a board adds visible TODO → In review tracking and an escalation column.
 - **No e2e framework** — warn: `crew:qa` extends a whole-app e2e suite and has nothing to extend without one. Suggest Playwright or Cypress; don't install it.
 - **No `start-cmd` (stack)** — warn: `crew:qa` (e2e) and `crew:reviewer` (Playwright) need the app running. With `start-cmd: none` they have no live stack to drive; suggest wiring a dev-server or `docker compose` target. Don't fabricate one.
