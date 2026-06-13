@@ -1,6 +1,6 @@
 ---
 name: adjust
-description: "Onboards a project for the crew loop — scans the structure, detects and validates the test / lint / build / e2e and app-start commands, detects the GitHub remote and optional Projects board, offers a one-time gated bare-clone worktree migration, advises on setup gaps, and writes a Workflow Config block into CLAUDE.md (commands, ticket-source label, board columns incl. a needs-human/blocked and a done column, the merge-approval label and merge method, branch convention, worktree layout, and the stack-run config: start command / readiness check / per-ticket isolation) that every other component reads at runtime. Use when the user invokes /crew:adjust."
+description: "Onboards a project for the crew loop — scans the structure, detects and validates the test / lint / build / e2e and app-start commands, detects the GitHub remote and optional Projects board, offers a one-time gated bare-clone worktree migration, advises on setup gaps, and writes a Workflow Config block into CLAUDE.md (commands, ticket-source label, board columns incl. a needs-human/blocked and a done column, the priority field, the review-followup + merge-approval labels and merge method, branch convention, worktree layout, and the stack-run config: start command / readiness check / per-ticket isolation) that every other component reads at runtime. Use when the user invokes /crew:adjust."
 ---
 
 # Adjust
@@ -124,6 +124,11 @@ The loop picks up open issues carrying an agent-ready label. Default: **`agent-r
 - Check whether it exists: `gh label list --search approved`. If the project uses a different convention (e.g. `ready-to-merge`), ask and substitute.
 - Record the chosen name as `merge-approval-label`. (Offer to create it in Step 9.)
 
+### 5a-4 — The review-followup label
+`crew:findings` (the run loop's last agent) files small advisory follow-ups under this label, and `/crew:ticket condense` batches them into runnable `agent-ready` tickets. Default: **`review-followup`** — never `agent-ready` (so the loop doesn't auto-pick them), and each is blocked by its source MR until it merges.
+- Check whether it exists: `gh label list --search review-followup`. Substitute if the project uses another name.
+- Record the chosen name as `review-followup-label`. (Offer to create it in Step 9.)
+
 ### 5b — The board (optional)
 A GitHub Projects-v2 board is **optional**. If present, the loop reads and moves cards through it; if absent, the loop falls back to label-only selection.
 - List boards linked to the repo/owner: `gh project list --owner <owner>` (and ask which one, if several). If the user has no board or doesn't want one, set `board: none` and skip to Step 6 — the loop will run label-only.
@@ -141,6 +146,11 @@ The loop needs four named states. Map each to a real column on the chosen board 
 | `status-done` | `Done` | where `/crew:merge` moves a card after its MR is merged |
 
 If the board's real columns differ (e.g. `Backlog` / `Doing` / `Review` / `Needs human`), map to those exact names — the loop drives the board by these strings.
+
+### 5d — The priority field (optional, board-only)
+`/crew:run` picks the **highest-priority** `agent-ready` ticket first, oldest within a tier (§4.5). If the board has a **Priority single-select** field, capture it so the loop can order by it.
+- List the board's fields: `gh project field-list <number> --owner <owner>`. Find a single-select named `Priority` (or similar); record its name as `priority-field` and its options in **rank order** (top = highest), so run knows which value outranks which.
+- If there's no board or no such field, record `priority-field: none`; the loop falls back to a `priority:*` **label** scheme if present (record as `priority-labels`, e.g. `high,medium,low`), else pure oldest-first. Note the fallback in the report.
 
 ---
 
@@ -276,7 +286,9 @@ Assemble the full block and show it before writing. Ask **"Does this look right?
 | agent-ready-label | `agent-ready` |
 | agent-review-label | `agent-review` |
 | merge-approval-label | `approved` |
+| review-followup-label | `review-followup` |
 | board | `<project number / URL>`  *(or `none`)* |
+| priority-field | `Priority`  *(or `none`)* |
 | status-todo | `TODO` |
 | status-in-progress | `In progress` |
 | status-in-review | `In review` |
@@ -315,6 +327,7 @@ After writing, surface (don't auto-fix) the gaps that will bite the loop:
 - **No `agent-ready` label yet** — offer to create it: `gh label create <label> --color 0E8A16 --description "Ready for the crew loop"`. The loop needs at least one labeled issue to do anything.
 - **No `agent-review` label yet** — offer to create it: `gh label create <agent-review-label> --color FBCA04 --description "Backlog finding — for human planning"`. `/crew:improve` files backlog tickets under it; without the label it can't tag them. (`crew:findings` files unlabeled, MR-blocked tickets and doesn't need it.)
 - **No merge-approval (`approved`) label yet** — offer to create it: `gh label create <merge-approval-label> --color 0E8A16 --description "Approved to merge — /crew:merge will land it"`. Without it, `/crew:merge` has no green-light signal and merges nothing.
+- **No `review-followup` label yet** — offer to create it: `gh label create <review-followup-label> --color 5319E7 --description "Review follow-up from crew — small, MR-blocked backlog"`. `crew:findings` files small follow-ups under it and `/crew:ticket condense` batches them; without it findings can't tag them.
 - **No board** — fine; note the loop will run label-only (oldest agent-ready issue first) and won't move cards. Mention a board adds visible TODO → In review tracking and an escalation column.
 - **No e2e framework** — warn: `crew:qa` extends a whole-app e2e suite and has nothing to extend without one. Suggest Playwright or Cypress; don't install it.
 - **No `start-cmd` (stack)** — warn: `crew:qa` (e2e) and `crew:reviewer` (Playwright) need the app running. With `start-cmd: none` they have no live stack to drive; suggest wiring a dev-server or `docker compose` target. Don't fabricate one.
@@ -357,7 +370,7 @@ When invoked with `update` or a specific key:
 
 - Confirm GitHub auth and a default repo (Step 0) before writing anything — the loop is GitHub-driven.
 - Detect commands from actual project files, then **run them** to validate.
-- Capture the full ticket-source + merge contract: `agent-ready-label`, `agent-review-label` (the backlog label `/crew:improve` files under), `merge-approval-label` (the human go-ahead `/crew:merge` gates on — default `approved`), the board statuses (TODO / In progress / In review / **`status-done`** / a **needs-human/blocked** column), `branch-convention`, and `merge-method` — the loop and `/crew:merge` read exactly these keys.
+- Capture the full ticket-source + merge contract: `agent-ready-label`, `agent-review-label` (the `/crew:improve` backlog), `review-followup-label` (where `crew:findings` files small follow-ups and `/crew:ticket condense` reads them — default `review-followup`), `merge-approval-label` (the `/crew:merge` go-ahead — default `approved`), the board statuses (TODO / In progress / In review / **`status-done`** / a **needs-human/blocked** column), the **`priority-field`** (priority-ordered selection, §4.5), `branch-convention`, and `merge-method` — the loop, `/crew:merge`, and `/crew:ticket condense` read exactly these keys.
 - Capture the **stack-run config** (`start-cmd`, `readiness-check`, `port`, `isolation-scheme`) and **validate** it by bringing the stack up under an issue-derived isolation and tearing it down — qa and reviewer depend on a running, isolated stack.
 - Offer the **bare-clone worktree migration** only with explicit consent; record `worktree-layout` either way. Preserve the old repo on migration; never auto-delete it.
 - Present the config for confirmation before writing it.

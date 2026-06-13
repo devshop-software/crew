@@ -1,6 +1,6 @@
 ---
 name: run
-description: "Autonomous orchestrator loop. Pulls the next agent-ready GitHub issue, processes it end-to-end in a per-ticket git worktree by dispatching crew:implementation → crew:qa → crew:reviewer (with a capped fix loop) → crew:mr-review → crew:findings (files leftover advisory findings as unlabeled, MR-blocked follow-up tickets), then flips the draft MR to ready-for-review and moves to the next issue. GitHub is the source of truth: each agent commits and comments on the MR; the loop never does domain work and never waits for a human merge. Project conventions are read from CLAUDE.md ## Workflow Config at runtime. Use when the user invokes /crew:run."
+description: "Autonomous orchestrator loop. Pulls the next agent-ready GitHub issue, processes it end-to-end in a per-ticket git worktree by dispatching crew:implementation → crew:qa → crew:reviewer (with a capped fix loop) → crew:mr-review → crew:findings (files leftover advisory findings as review-followup-labeled, MR-blocked follow-up tickets), then flips the draft MR to ready-for-review and moves to the next issue. GitHub is the source of truth: each agent commits and comments on the MR; the loop never does domain work and never waits for a human merge. Project conventions are read from CLAUDE.md ## Workflow Config at runtime. Use when the user invokes /crew:run."
 ---
 
 # Run
@@ -32,6 +32,7 @@ Before touching any ticket, establish that the environment is wired up. Stop wit
 3. **Read `## Workflow Config`** from `CLAUDE.md` (walk upward from the CWD until found). Parse the key-value table. If there is no Workflow Config, stop: "No `## Workflow Config` found. Run `/crew:adjust` to set up the project." From it, capture:
    - **`agent-ready` label** name (the queue + kill switch).
    - **Board** identifiers, *if a board is configured*: the Projects-v2 project number/ID and the **status/column names** — TODO, In progress, In review, and the needs-human / blocked column.
+   - **Priority** ordering, if configured: the board's **Priority field** name (`priority-field`; a single-select whose options are ranked top-to-bottom = highest-to-lowest) for priority-ordered selection (§4.5). Fall back to a `priority:*` **label** scheme (`priority-labels`), or to none (pure oldest-first).
    - **Commands:** test, lint, build.
    - **Branch convention** (default `crew/<issue#>-<slug>`).
    - **Base branch** (the branch worktrees fork from and MRs target).
@@ -53,8 +54,8 @@ Step 1 is Preflight (above); Steps 2–12 are **one ticket**. After Step 12, loo
 
 Board-agnostic selection, per the shared contract:
 
-- **With a board:** the oldest open issue carrying the `agent-ready` label whose board status is **TODO**. Query the Projects-v2 board via `gh` GraphQL (project items filtered to the TODO status), intersect with `gh issue list --label <agent-ready> --state open`, take the oldest by issue number.
-- **Without a board:** `gh issue list --label <agent-ready> --state open --json number,title,createdAt`, oldest-first by creation.
+- **With a board:** among open issues carrying the `agent-ready` label whose board status is **TODO**, pick the **highest-priority** one, breaking ties by **oldest** (lowest issue number). Read the board's **Priority field** (`priority-field` from `## Workflow Config`); its options are ranked in the field's defined order (top = highest). Query the Projects-v2 board via `gh` GraphQL for the TODO items **and their Priority value**, intersect with `gh issue list --label <agent-ready> --state open`, and sort by **(priority rank, then createdAt)**. Issues with **no priority set** sort **after** all prioritized ones (lowest), still oldest-first among themselves. If no `priority-field` is configured, fall back to oldest-first.
+- **Without a board:** `gh issue list --label <agent-ready> --state open --json number,title,createdAt,labels`. If a `priority:*` label scheme (`priority-labels`) is configured, sort by it (high→low) then oldest; otherwise oldest-first by creation.
 
 Skip any issue that already has an open `Closes #N` MR — that is in-flight work for the resume path, not a fresh pick. **Also skip any issue whose latest `crew:claim` marker names a live peer orchestrator** (§4.13) — that's another run's in-flight ticket, not yours to pick. Also skip any issue you have already recorded as **skipped** this run (see Step 3 — Triage) so it isn't re-picked.
 
@@ -173,8 +174,8 @@ Runs only after a reviewer PASS **and a green CI gate (Step 9b)** — so it alwa
 
 After `mr-review` clears (`PROCEED`, or a `BOUNCE` resolved and re-cleared) and **before finalizing**, dispatch `crew:findings` once. This stops the advisory findings from evaporating (§5.8).
 
-- Task: read the **final** `crew:reviewer` and `crew:mr-review` MR comments, extract their **non-blocking** findings (MINOR, advisory MAJOR, out-of-scope-of-this-MR), **dedup against existing open findings issues**, and file **one issue per distinct actionable finding** — **unlabeled** and **blocked by this MR** (so it can't be actioned until the MR merges) — with a backlink to the MR + comment, file refs, severity. Post a short `crew:findings` summary comment on the MR listing the filed issue URLs (or "no actionable findings").
-- The filed issues carry **no labels** (so the loop never picks them up — it only acts on `agent-ready`) and are **blocked by the MR** until it merges; a human plans them post-merge.
+- Task: read the **final** `crew:reviewer` and `crew:mr-review` MR comments, extract their **non-blocking** findings (MINOR, advisory MAJOR, out-of-scope-of-this-MR), **dedup against existing open `review-followup` issues**, and file **one issue per distinct actionable finding** — labeled **`review-followup`** and **blocked by this MR** (so it can't be actioned until the MR merges) — with a backlink to the MR + comment, file refs, severity. Post a short `crew:findings` summary comment on the MR listing the filed issue URLs (or "no actionable findings").
+- The filed issues are **`review-followup`-labeled, never `agent-ready`** (so the loop never picks them up — it only acts on `agent-ready`) and are **blocked by the MR** until it merges; a human or `/crew:ticket condense` plans them post-merge.
 - **Non-blocking:** a `crew:findings` failure is logged and does **not** hold up finalize — the MR still ships.
 - **Breakpoint `findings`** → pause here.
 
@@ -258,7 +259,7 @@ Each agent prompt must carry:
 When Step 2 finds no actionable ticket, stop and report:
 
 - **Shipped:** each ticket taken to ready-for-review this run — issue #, title, MR URL.
-- **Findings filed:** the count of (unlabeled, MR-blocked) follow-up tickets `crew:findings` opened this run (with their issue #s), so the human sees what's queued for post-merge planning.
+- **Findings filed:** the count of (`review-followup`-labeled, MR-blocked) follow-up tickets `crew:findings` opened this run (with their issue #s), so the human sees what's queued for post-merge planning (and `/crew:ticket condense` can batch).
 - **Escalated:** each ticket that hit the 3-round cap — issue #, MR URL (still draft), the column it was parked in, and the recurring finding.
 - **Skipped:** each ticket triaged out this run — issue #, and whether it was a blocker (with the reason) or an epic/parent.
 - **Queue:** "No actionable `agent-ready` issues remain" (or the count still open but not pickable, e.g. already in-flight elsewhere or skipped).
@@ -285,7 +286,7 @@ Then stop. Do not poll for new tickets unless re-invoked.
 - **Gate on live CI** — a red required check on the MR is a fix trigger; mr-review runs only once CI is green, and you never flip to ready-for-review over a red check.
 - Escalate with full context at the cap — leave the MR draft, comment, park the card, and **move on to the next ticket**.
 - Flip the MR to ready-for-review and move the card to In review on overall pass, then **continue without waiting for a human merge**.
-- After `mr-review` clears, dispatch **`crew:findings`** (Step 10b) to file the advisory reviewer/mr-review findings as **unlabeled, MR-blocked** follow-up tickets (never `agent-ready`; the loop only acts on `agent-ready`) before finalizing. It's non-blocking; a failure doesn't hold up the MR.
+- After `mr-review` clears, dispatch **`crew:findings`** (Step 10b) to file the advisory reviewer/mr-review findings as **`review-followup`-labeled, MR-blocked** follow-up tickets (never `agent-ready`; the loop only acts on `agent-ready`) before finalizing. It's non-blocking; a failure doesn't hold up the MR.
 - **Keep every command sandboxed, and never force a delete on the autonomous path** — `dangerouslyDisableSandbox`, `rm -rf`, and `git worktree remove --force` all raise the sandbox's own approval prompt and stall the run even under skip-permissions. Poll readiness sandboxed; remove the worktree with the plain non-forced `git worktree remove` and **leave-and-log if it refuses** rather than forcing it (§4.10).
 - **Verify every GitHub write landed** — re-fetch and confirm a comment / body-edit / label / card-move / state-flip actually took effect; edit MR bodies with `gh api -X PATCH`, never `gh pr edit` (§4.11).
 - Run label-only when no board is configured — skip every card move silently.
@@ -329,5 +330,5 @@ If you catch yourself thinking any of these, stop:
 - _"The user wrote `crew update` once, I should mention the npm flow"_ — STOP. V2 is a plugin only. No npm, no CLI, no distribution references.
 - _"I'll disable the sandbox just for the readiness curl"_ — STOP. `dangerouslyDisableSandbox` prompts a human and stalls the whole autonomous run, even under skip-permissions. Poll sandboxed; work around failures sandboxed (§4.10).
 - _"The worktree didn't remove cleanly, I'll add `--force` or just `rm -rf` it"_ — STOP. A forced or recursive delete trips the sandbox's own approval prompt and stalls the run, even under skip-permissions (§4.10). Use the plain `git worktree remove`; if it refuses, **leave the tree and log it** for a later `git worktree prune` — never force it mid-run.
-- _"mr-review passed, I'll finalize now — the MINOR findings are only advisory"_ — STOP. Dispatch `crew:findings` first (Step 10b) to file them as **unlabeled, MR-blocked** follow-up tickets (never `agent-ready`). Advisory findings shouldn't evaporate.
+- _"mr-review passed, I'll finalize now — the MINOR findings are only advisory"_ — STOP. Dispatch `crew:findings` first (Step 10b) to file them as **`review-followup`-labeled, MR-blocked** follow-up tickets (never `agent-ready`). Advisory findings shouldn't evaporate.
 - _"`gh pr edit` exited non-zero but it probably worked"_ — STOP. Use `gh api -X PATCH` and **re-fetch to confirm** the write landed. GitHub is the source of truth; a silent no-op corrupts it (§4.11).

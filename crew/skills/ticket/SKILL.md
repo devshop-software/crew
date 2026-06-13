@@ -21,6 +21,15 @@ Activate when called from the `/crew:ticket` command. Otherwise ignore.
 
 ---
 
+## Input Handling
+
+`$ARGUMENTS` selects the mode:
+
+- **empty** → **interview mode** (Steps 0–6 below): interview the user and write **one** new ticket. The default.
+- **`condense` [#…]** → **Condense Mode** (the section at the end): batch the open `review-followup` tickets `crew:findings` filed into a handful of right-sized `agent-ready` tickets. No interview.
+
+---
+
 ## Step 0 — Preflight
 
 Confirm the issue can actually be filed before interviewing:
@@ -165,3 +174,18 @@ If you catch yourself thinking any of these, stop:
 - _"The user stated an outcome and I'm writing a mechanism"_ — STOP. `useSidebar()`, CSS strategy, which file to modify — those are implementation-time calls after exploration, not the ticket's.
 - _"The criterion says 'document the runbook' — the agent can just put it in the PR."_ — STOP. Deliverables are committed files. Phrase it to land in the repo (e.g. `docs/…`), not the MR body — body prose isn't versioned and fails review.
 - _"The mockup link 404s — the source-of-truth attachment is gone, I'll stop."_ — STOP. On a **private** repo, GitHub returns a **decoy 404** to anonymous attachment requests. Re-fetch with the gh token (`curl -sL -H "Authorization: token $(gh auth token)" <url>`, §4.14) before concluding it's a dead link — an anonymous 404 means unauthenticated, not missing.
+
+---
+
+## Condense Mode (`/crew:ticket condense [#…]`)
+
+A **batch-planning** pass, not an interview. The small `review-followup` tickets `crew:findings` files at the end of each run aren't worth a full `/crew:run` each — the worktree + stack + five-agent chain dwarfs the work. Condense **clusters** the open `review-followup` tickets into a **handful of right-sized `agent-ready` tickets** the loop clears in one pass each, then closes the originals as rolled-into.
+
+1. **Preflight** (Step 0) — `gh auth status` + resolve the repo. Read `## Workflow Config` for the **`review-followup-label`** (default `review-followup`) and the `agent-ready-label`.
+2. **Gather the inputs.** `gh issue list --label <review-followup-label> --state open --json number,title,body,labels`. If issue numbers were passed as arguments, restrict to those. **Drop any still blocked by an unmerged MR** — a `review-followup` ticket is blocked until its source MR merges; check its blocked-by dependency / the `Blocked by #<MR>` body line and confirm that MR is **merged**. Only **unblocked** review-followups are condensable; list the still-blocked ones as skipped (they condense on a later pass, once their MR lands).
+3. **Cluster by scope — you decide how many.** Group the gathered findings into cohesive bundles by area / feature / file-neighborhood and size, so each bundle is **one sensible, atomic unit of work** a single run can ship. Don't force everything into one mega-ticket (it fails atomicity + review, §4.7), and don't leave them 1:1 (that defeats the point). A few tightly-related nits in one area → one ticket; unrelated areas → separate tickets. The **number of output tickets follows the scope**, not a fixed target.
+4. **Write one `agent-ready` ticket per bundle** in the normal contract (Context / Out of scope / Acceptance criteria — Step 4's structure): **each folded finding becomes one testable acceptance-criteria checklist item**, carrying its file refs and a backlink to the original `#issue`. The Context names the bundle's theme and links the source findings. Apply the **anti-spec** and **deliverables-are-committed-files** rules as in interview mode. Create each with `--label <agent-ready-label>` (Step 5); capture the URLs.
+5. **Close the originals as rolled-into.** For every folded issue: comment `Rolled into #<new-ticket> by /crew:ticket condense — tracked there now.`, then `gh issue close <n> --reason "not planned"`. **Verify each comment + close landed** (§4.11). The work isn't lost — it lives in the bundle's acceptance criteria.
+6. **Report:** each new `agent-ready` ticket (URL + how many findings it folded), the issues closed, and any still-blocked review-followups left for a later pass.
+
+Condense **regroups and restates** findings already filed — it never interviews, never invents scope, and never folds a finding that's really its own feature (leave those open and say so). The output tickets land in the `agent-ready` queue, where `/crew:run` picks them by **priority + age** (§4.5).
