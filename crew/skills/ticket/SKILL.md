@@ -51,6 +51,14 @@ Before asking questions, spend a few minutes verifying the feature maps to real 
 - Grep/Glob for the symbols, files, or commands the user mentioned.
 - Identify the 2–5 files most likely to be affected so the Context and acceptance criteria are concrete.
 
+**If the feature or issue points at an attachment as its source of truth** — a mockup, a design export, a spec file linked as `https://github.com/user-attachments/…` (or a repo `…/assets/…` URL) — fetch it and read it; it's part of the spec. On a **private** repo those links are **auth-gated**, so fetch with the gh token:
+
+```sh
+curl -sL -H "Authorization: token $(gh auth token)" "<attachment-url>" -o <file>
+```
+
+GitHub 302-redirects to a signed URL that `-L` follows. **An anonymous 404 on such a link means *not authenticated*, not *deleted*** — a plain `curl` gets a decoy 404 for private-repo attachments. Always retry authenticated before treating the attachment as missing or blocking the ticket on it (§4.14).
+
 **Do not** explore to implementation depth. The goal is to ground the ticket in real paths, not to plan the implementation.
 
 ---
@@ -156,3 +164,4 @@ If you catch yourself thinking any of these, stop:
 - _"I'll ask the user to list what's NOT in scope"_ — STOP. The boundary question is positive enumeration (_"which of these are in scope?"_); derive Out-of-scope from what they didn't mark.
 - _"The user stated an outcome and I'm writing a mechanism"_ — STOP. `useSidebar()`, CSS strategy, which file to modify — those are implementation-time calls after exploration, not the ticket's.
 - _"The criterion says 'document the runbook' — the agent can just put it in the PR."_ — STOP. Deliverables are committed files. Phrase it to land in the repo (e.g. `docs/…`), not the MR body — body prose isn't versioned and fails review.
+- _"The mockup link 404s — the source-of-truth attachment is gone, I'll stop."_ — STOP. On a **private** repo, GitHub returns a **decoy 404** to anonymous attachment requests. Re-fetch with the gh token (`curl -sL -H "Authorization: token $(gh auth token)" <url>`, §4.14) before concluding it's a dead link — an anonymous 404 means unauthenticated, not missing.
