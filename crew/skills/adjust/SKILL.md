@@ -147,10 +147,11 @@ The loop needs four named states. Map each to a real column on the chosen board 
 
 If the board's real columns differ (e.g. `Backlog` / `Doing` / `Review` / `Needs human`), map to those exact names — the loop drives the board by these strings.
 
-### 5d — The priority field (optional, board-only)
-`/crew:run` picks the **highest-priority** `agent-ready` ticket first, oldest within a tier (§4.5). If the board has a **Priority single-select** field, capture it so the loop can order by it.
-- List the board's fields: `gh project field-list <number> --owner <owner>`. Find a single-select named `Priority` (or similar); record its name as `priority-field` and its options in **rank order** (top = highest), so run knows which value outranks which.
-- If there's no board or no such field, record `priority-field: none`; the loop falls back to a `priority:*` **label** scheme if present (record as `priority-labels`, e.g. `high,medium,low`), else pure oldest-first. Note the fallback in the report.
+### 5d — The priority field (Issue Field, org-only)
+`/crew:run` picks the **highest-priority** `agent-ready` ticket first, oldest within a tier (§4.5). On GitHub, **Priority is an org-level *Issue Field*** (default options Urgent/High/Medium/Low) stored on the issue — **not** a Projects-v2 single-select. (A project may show a same-named but **empty shell** field; don't use it — `gh project field-list` reports `options: []` for it. The real values live on the issue.)
+- **Detect it:** `gh api orgs/<owner>/issue-fields` → find a `single_select` field named `Priority` (or the project's convention). Record its name as `priority-field` (default `Priority`). Each option carries a `priority` int (lower = higher rank); run reads the live ranks at selection time, so you only record the **name**.
+- **Org-only:** issue fields exist only on **org**-owned repos. On a user repo (or if the org has no Priority issue field), record `priority-field: none`; the loop falls back to a `priority:*` **label** scheme if present (record as `priority-labels`, e.g. `high,medium,low`), else pure oldest-first. Note the fallback.
+- **Scope:** reading issue fields (and the board) needs a token with org/project read scopes; if `gh api orgs/<owner>/issue-fields` errors with `INSUFFICIENT_SCOPES`, tell the user to run `gh auth refresh -s read:project,read:org`.
 
 ---
 
