@@ -1,6 +1,6 @@
 ---
 name: run
-description: "Autonomous orchestrator loop. Pulls the next agent-ready GitHub issue, processes it end-to-end in a per-ticket git worktree by dispatching crew:implementation → crew:qa → crew:reviewer (with a capped fix loop) → crew:mr-review → crew:findings (files leftover advisory findings as agent-review backlog tickets), then flips the draft MR to ready-for-review and moves to the next issue. GitHub is the source of truth: each agent commits and comments on the MR; the loop never does domain work and never waits for a human merge. Project conventions are read from CLAUDE.md ## Workflow Config at runtime. Use when the user invokes /crew:run."
+description: "Autonomous orchestrator loop. Pulls the next agent-ready GitHub issue, processes it end-to-end in a per-ticket git worktree by dispatching crew:implementation → crew:qa → crew:reviewer (with a capped fix loop) → crew:mr-review → crew:findings (files leftover advisory findings as unlabeled, MR-blocked follow-up tickets), then flips the draft MR to ready-for-review and moves to the next issue. GitHub is the source of truth: each agent commits and comments on the MR; the loop never does domain work and never waits for a human merge. Project conventions are read from CLAUDE.md ## Workflow Config at runtime. Use when the user invokes /crew:run."
 ---
 
 # Run
@@ -173,8 +173,8 @@ Runs only after a reviewer PASS **and a green CI gate (Step 9b)** — so it alwa
 
 After `mr-review` clears (`PROCEED`, or a `BOUNCE` resolved and re-cleared) and **before finalizing**, dispatch `crew:findings` once. This stops the advisory findings from evaporating (§5.8).
 
-- Task: read the **final** `crew:reviewer` and `crew:mr-review` MR comments, extract their **non-blocking** findings (MINOR, advisory MAJOR, out-of-scope-of-this-MR), **dedup against existing open `agent-review` issues**, and file **one `agent-review` issue per distinct actionable finding** (backlink to the MR + comment, file refs, severity). Post a short `crew:findings` summary comment on the MR listing the filed issue URLs (or "no actionable findings").
-- The filed issues are **`agent-review`, never `agent-ready`** — they stay in the backlog for human planning; the loop must not pick them up.
+- Task: read the **final** `crew:reviewer` and `crew:mr-review` MR comments, extract their **non-blocking** findings (MINOR, advisory MAJOR, out-of-scope-of-this-MR), **dedup against existing open findings issues**, and file **one issue per distinct actionable finding** — **unlabeled** and **blocked by this MR** (so it can't be actioned until the MR merges) — with a backlink to the MR + comment, file refs, severity. Post a short `crew:findings` summary comment on the MR listing the filed issue URLs (or "no actionable findings").
+- The filed issues carry **no labels** (so the loop never picks them up — it only acts on `agent-ready`) and are **blocked by the MR** until it merges; a human plans them post-merge.
 - **Non-blocking:** a `crew:findings` failure is logged and does **not** hold up finalize — the MR still ships.
 - **Breakpoint `findings`** → pause here.
 
@@ -258,7 +258,7 @@ Each agent prompt must carry:
 When Step 2 finds no actionable ticket, stop and report:
 
 - **Shipped:** each ticket taken to ready-for-review this run — issue #, title, MR URL.
-- **Findings filed:** the count of `agent-review` backlog tickets `crew:findings` opened this run (with their issue #s), so the human sees what's queued for planning.
+- **Findings filed:** the count of (unlabeled, MR-blocked) follow-up tickets `crew:findings` opened this run (with their issue #s), so the human sees what's queued for post-merge planning.
 - **Escalated:** each ticket that hit the 3-round cap — issue #, MR URL (still draft), the column it was parked in, and the recurring finding.
 - **Skipped:** each ticket triaged out this run — issue #, and whether it was a blocker (with the reason) or an epic/parent.
 - **Queue:** "No actionable `agent-ready` issues remain" (or the count still open but not pickable, e.g. already in-flight elsewhere or skipped).
@@ -285,7 +285,7 @@ Then stop. Do not poll for new tickets unless re-invoked.
 - **Gate on live CI** — a red required check on the MR is a fix trigger; mr-review runs only once CI is green, and you never flip to ready-for-review over a red check.
 - Escalate with full context at the cap — leave the MR draft, comment, park the card, and **move on to the next ticket**.
 - Flip the MR to ready-for-review and move the card to In review on overall pass, then **continue without waiting for a human merge**.
-- After `mr-review` clears, dispatch **`crew:findings`** (Step 10b) to file the advisory reviewer/mr-review findings as **`agent-review`** backlog tickets — **never `agent-ready`** — before finalizing. It's non-blocking; a failure doesn't hold up the MR.
+- After `mr-review` clears, dispatch **`crew:findings`** (Step 10b) to file the advisory reviewer/mr-review findings as **unlabeled, MR-blocked** follow-up tickets (never `agent-ready`; the loop only acts on `agent-ready`) before finalizing. It's non-blocking; a failure doesn't hold up the MR.
 - **Keep every command sandboxed, and never force a delete on the autonomous path** — `dangerouslyDisableSandbox`, `rm -rf`, and `git worktree remove --force` all raise the sandbox's own approval prompt and stall the run even under skip-permissions. Poll readiness sandboxed; remove the worktree with the plain non-forced `git worktree remove` and **leave-and-log if it refuses** rather than forcing it (§4.10).
 - **Verify every GitHub write landed** — re-fetch and confirm a comment / body-edit / label / card-move / state-flip actually took effect; edit MR bodies with `gh api -X PATCH`, never `gh pr edit` (§4.11).
 - Run label-only when no board is configured — skip every card move silently.
@@ -329,5 +329,5 @@ If you catch yourself thinking any of these, stop:
 - _"The user wrote `crew update` once, I should mention the npm flow"_ — STOP. V2 is a plugin only. No npm, no CLI, no distribution references.
 - _"I'll disable the sandbox just for the readiness curl"_ — STOP. `dangerouslyDisableSandbox` prompts a human and stalls the whole autonomous run, even under skip-permissions. Poll sandboxed; work around failures sandboxed (§4.10).
 - _"The worktree didn't remove cleanly, I'll add `--force` or just `rm -rf` it"_ — STOP. A forced or recursive delete trips the sandbox's own approval prompt and stalls the run, even under skip-permissions (§4.10). Use the plain `git worktree remove`; if it refuses, **leave the tree and log it** for a later `git worktree prune` — never force it mid-run.
-- _"mr-review passed, I'll finalize now — the MINOR findings are only advisory"_ — STOP. Dispatch `crew:findings` first (Step 10b) to file them as `agent-review` backlog tickets (never `agent-ready`). Advisory findings shouldn't evaporate.
+- _"mr-review passed, I'll finalize now — the MINOR findings are only advisory"_ — STOP. Dispatch `crew:findings` first (Step 10b) to file them as **unlabeled, MR-blocked** follow-up tickets (never `agent-ready`). Advisory findings shouldn't evaporate.
 - _"`gh pr edit` exited non-zero but it probably worked"_ — STOP. Use `gh api -X PATCH` and **re-fetch to confirm** the write landed. GitHub is the source of truth; a silent no-op corrupts it (§4.11).
