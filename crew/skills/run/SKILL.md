@@ -184,7 +184,7 @@ On overall pass (reviewer PASS, **CI green** (Step 9b), mr-review cleared, and `
 2. **Delete the `progress_log`** file (`rm -f <progress_log path>`). GitHub now holds the full record.
 3. **Flip the MR draft → ready-for-review:** `gh pr ready <MR-number>` — **only with all required checks green**; if CI has run since the Step 9b gate, re-confirm green first and never flip over a red check.
 4. **Move the card → In review** (board only).
-5. **Remove the worktree:** `git worktree remove <worktree-path>` (and `rm -rf` if it lingers). The branch and MR remain on the remote for a human to merge.
+5. **Remove the worktree:** `git worktree remove <worktree-path>` — the **non-forced** form, run sandboxed. It succeeds because a finalized tree holds only *ignored* artifacts (the copied `.env`, build output), which git removes without complaint. **Never pass `--force` and never fall back to `rm -rf`** — a forced or recursive filesystem delete trips the sandbox's own approval prompt (a separate gate from the permission system, *not* suppressed by `--dangerously-skip-permissions`) and **stalls the entire autonomous run** (§4.10). If the non-forced removal exceptionally refuses (a genuinely untracked or modified tracked file), **leave the worktree in place and log it** — a later `git worktree prune` / human cleanup reclaims the disk; never escalate to a forceful delete mid-run. The branch and MR remain on the remote for a human to merge.
 
 ### Step 12 — Loop
 
@@ -279,7 +279,7 @@ Then stop. Do not poll for new tickets unless re-invoked.
 - Escalate with full context at the cap — leave the MR draft, comment, park the card, and **move on to the next ticket**.
 - Flip the MR to ready-for-review and move the card to In review on overall pass, then **continue without waiting for a human merge**.
 - After `mr-review` clears, dispatch **`crew:findings`** (Step 10b) to file the advisory reviewer/mr-review findings as **`agent-review`** backlog tickets — **never `agent-ready`** — before finalizing. It's non-blocking; a failure doesn't hold up the MR.
-- **Keep every command sandboxed** — never set `dangerouslyDisableSandbox` (it prompts a human and stalls the run, even under skip-permissions); poll readiness from inside the sandbox (§4.10).
+- **Keep every command sandboxed, and never force a delete on the autonomous path** — `dangerouslyDisableSandbox`, `rm -rf`, and `git worktree remove --force` all raise the sandbox's own approval prompt and stall the run even under skip-permissions. Poll readiness sandboxed; remove the worktree with the plain non-forced `git worktree remove` and **leave-and-log if it refuses** rather than forcing it (§4.10).
 - **Verify every GitHub write landed** — re-fetch and confirm a comment / body-edit / label / card-move / state-flip actually took effect; edit MR bodies with `gh api -X PATCH`, never `gh pr edit` (§4.11).
 - Run label-only when no board is configured — skip every card move silently.
 
@@ -320,5 +320,6 @@ If you catch yourself thinking any of these, stop:
 - _"I'll set `isolation: worktree` on the agent so it's clean"_ — STOP. You own one worktree per ticket; per-agent worktrees split the work across trees.
 - _"The user wrote `crew update` once, I should mention the npm flow"_ — STOP. V2 is a plugin only. No npm, no CLI, no distribution references.
 - _"I'll disable the sandbox just for the readiness curl"_ — STOP. `dangerouslyDisableSandbox` prompts a human and stalls the whole autonomous run, even under skip-permissions. Poll sandboxed; work around failures sandboxed (§4.10).
+- _"The worktree didn't remove cleanly, I'll add `--force` or just `rm -rf` it"_ — STOP. A forced or recursive delete trips the sandbox's own approval prompt and stalls the run, even under skip-permissions (§4.10). Use the plain `git worktree remove`; if it refuses, **leave the tree and log it** for a later `git worktree prune` — never force it mid-run.
 - _"mr-review passed, I'll finalize now — the MINOR findings are only advisory"_ — STOP. Dispatch `crew:findings` first (Step 10b) to file them as `agent-review` backlog tickets (never `agent-ready`). Advisory findings shouldn't evaporate.
 - _"`gh pr edit` exited non-zero but it probably worked"_ — STOP. Use `gh api -X PATCH` and **re-fetch to confirm** the write landed. GitHub is the source of truth; a silent no-op corrupts it (§4.11).
