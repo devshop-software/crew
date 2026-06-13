@@ -100,6 +100,8 @@ Announce the plan in one line: `Ticket #<n> "<title>" → worktree <path>, branc
 
 **You own the stack lifecycle.** `qa` (e2e) and `reviewer` (Playwright) both run against a live application; bring it up here so they never start their own.
 
+**Leaked-stack sweep (cheap insurance):** before bringing this ticket's stack up, check that no dev server from an **already-finalized** ticket of yours is still listening on a crew-derived port; if a prior teardown missed the process tree, reap the straggler with `fuser -k <port>/tcp`. Only reap ports for **finalized tickets of your own run** — never an active ticket's port or a peer run's (§4.13). At steady state only one stack (the current ticket's) should be up.
+
 1. Run the configured **start command** with the **isolation scheme** applied — derive ports and data namespaces from the issue number (e.g. `PORT = base + (issue# mod N)`, DB schema / container name suffixed with the issue#) so this ticket never collides with the developer's stack or another ticket. The recipe is config, not hardcoded.
 2. **Wait for readiness** via the configured check (health URL / port). **Run the readiness poll sandboxed** — never set `dangerouslyDisableSandbox` to reach localhost. That flag prompts a human and **stalls the entire autonomous run** regardless of permission mode (even under `--dangerously-skip-permissions`); §4.10. If a sandboxed check can't reach the stack, find a sandboxed workaround — do not escalate.
 3. **Export the base URL/port** to the env the agents read, and carry it in every `qa` / `reviewer` dispatch prompt.
@@ -183,7 +185,7 @@ After `mr-review` clears (`PROCEED`, or a `BOUNCE` resolved and re-cleared) and 
 
 On overall pass (reviewer PASS, **CI green** (Step 9b), mr-review cleared, and `crew:findings` has run (Step 10b)):
 
-1. **Tear down the stack** you brought up in Step 6 (stop the start command / `docker compose down`, release the issue-derived ports and data namespace).
+1. **Tear down the stack** you brought up in Step 6, and **verify it's actually gone.** A plain `kill $(lsof -ti :<port>)` can return a single/stale PID and miss the rest of the dev-server process tree (`pnpm → sh → node → next-server`), leaking the server for hours and wasting resources — use **`fuser -k <port>/tcp`** (or `docker compose -p <project> down`), which reaps **every** process bound to the port, then confirm the port is free (`lsof -i :<port>` returns nothing). Release the issue-derived ports and data namespace.
 2. **Delete the `progress_log`** file (`rm -f <progress_log path>`). GitHub now holds the full record.
 3. **Flip the MR draft → ready-for-review:** `gh pr ready <MR-number>` — **only with all required checks green**; if CI has run since the Step 9b gate, re-confirm green first and never flip over a red check.
 4. **Move the card → In review** (board only).
@@ -278,7 +280,7 @@ Then stop. Do not poll for new tickets unless re-invoked.
 - **Triage every candidate before any work** — skip blockers (needs-human / unmerged dependency / missing access / underspecified) and epics/parents with a short comment + card move, record them as skipped, and pick the next candidate. The loop stops only when no **actionable** ticket remains.
 - Keep **one MR per ticket**; the implementation agent opens it as a draft with `Closes #<issue>`; every agent thereafter commits to that branch and comments on that MR.
 - Own **one worktree per ticket** off the **bare clone** (set up by `adjust`; fall back to the existing checkout if there's no bare clone), and dispatch all phases into it; remove it at finalize (an escalated ticket's tree may be left in place).
-- **Own the stack lifecycle** — bring the app stack up after the worktree (configured start command + issue-derived isolation, wait for readiness, export the base URL/port), and tear it down when the ticket finishes. Agents never start their own stack.
+- **Own the stack lifecycle** — bring the app stack up after the worktree (configured start command + issue-derived isolation, wait for readiness, export the base URL/port), and tear it down when the ticket finishes. **Tear down reliably with `fuser -k <port>/tcp` (or `docker compose -p <project> down`) and verify the port is free** — a plain `lsof | kill` leaks the dev-server process tree. Sweep for leaked stacks from your finalized tickets before bringing a new one up. Agents never start their own stack.
 - Keep the `progress_log` **outside** the repo, never commit it, and delete it at ready-for-review.
 - Resume from **GitHub** — read MR comments to find the last completed phase; trust them over any surviving `progress_log`.
 - **Claim by identity; respect live peers (§4.13)** — hold a `RUN_ID = host:pid:start`, stamp each claimed ticket with a `crew:claim` marker and win the earliest-claim tiebreak before working it, skip fresh picks a live peer has claimed, and on resume adopt an in-flight ticket only if it's **yours or its owner is dead**. Two `/crew:run` on one repo may run concurrently but must never co-write a ticket.
@@ -320,6 +322,7 @@ If you catch yourself thinking any of these, stop:
 - _"CI is red but the reviewer passed, I'll flip to ready-for-review anyway"_ — STOP. Never finalize over a red required check. Red CI is a fix round (Step 9b), inside the same 3-round cap.
 - _"This ticket needs a human / is an epic, but I'll try implementing it anyway"_ — STOP. Triage first: skip it with a comment + card move, record it as skipped, and pick the next candidate. The loop only stops when nothing actionable is left.
 - _"qa can just spin the app up itself"_ — STOP. You own the stack. Bring it up in Step 6 with issue-derived isolation, export the URL, and tear it down at finalize.
+- _"`kill $(lsof -ti :PORT)` returned, so the stack's down"_ — STOP. That often kills only one PID of the dev-server tree (`pnpm → sh → node → next-server`) and **leaks the server**. Tear down with `fuser -k <port>/tcp` (or `docker compose -p <project> down`) and confirm the port is free; sweep finalized-ticket ports before each bring-up (§4.8).
 - _"The board column is probably called 'Done', I'll just use that"_ — STOP. Read the column names from `## Workflow Config`. Don't guess.
 - _"Let me wait for the human to merge before starting the next ticket"_ — STOP. No auto-merge, no waiting. Ready-for-review then advance.
 - _"This is a big or irreversible call (conflicting MR, work that may already be done, a mistake I just caught) — I'll ask the user which way to go"_ — STOP. You are an **independent** orchestrator; there is no human at the terminal, and `AskUserQuestion` doesn't pause for an answer — it hangs the whole queue. Decide it from the defaults, or — if it's genuinely human-only — **skip-as-blocked / escalate** with a comment and advance. Asking is never one of your moves.
