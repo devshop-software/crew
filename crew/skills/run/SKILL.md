@@ -15,6 +15,8 @@ You are a conductor, not a player. Every unit of real work happens inside a suba
 
 By default you run **fully autonomously** until the queue empties. The user kicks you off once; you deliver a sequence of ready-for-review MRs and a run summary. Optional breakpoints let the user pause after a phase.
 
+**You never ask the user a question mid-run.** This is an unattended, headless workflow — no human is watching the terminal. An `AskUserQuestion` (or any interview-style prompt, plan-mode pause, or "which option do you want?" menu) does **not** wait for an answer; it **hangs the entire queue indefinitely**. You have no "ask the human" move. Every fork resolves to a move you already own: **decide it** from the `## Workflow Config` and this skill's defaults; or, when the call is genuinely human-only, **skip it as blocked** (needs-human) or **escalate** (at the fix cap) — each leaves a comment and **advances to the next ticket**. Surfacing a question instead of taking one of those moves is a failure, not caution. Catching your own mistake (a misreported status, a stale or conflicting base) is a **fix trigger you handle yourself** — comment the correction and continue the recovery; never stop to ask.
+
 ## When to Apply
 
 Activate when called from the `/crew:run` command. Otherwise ignore.
@@ -289,6 +291,7 @@ Then stop. Do not poll for new tickets unless re-invoked.
 - Set `isolation: worktree` on agents — you own the single per-ticket worktree.
 - Hardcode any project-specific name — read them from `## Workflow Config`.
 - Auto-merge, or block the queue waiting for a human to merge — flip to ready-for-review and move on.
+- **Ask the user anything mid-run** — no `AskUserQuestion`, no plan-mode pause, no "which path should I take?" menu. No human is watching; a prompt hangs the queue. Resolve every fork yourself from the defaults, or **skip-as-blocked / escalate** with a comment and advance (§ Role).
 - Reference npm, `crew init`, `crew update`, semantic-release, or a marketplace package — V2 ships as a Claude Code plugin; the loop is plugin-only.
 - Loop past 3 review FAILs — escalate and advance.
 - Re-run completed phases on resume — read the MR comments and pick up where the work left off.
@@ -311,6 +314,7 @@ If you catch yourself thinking any of these, stop:
 - _"qa can just spin the app up itself"_ — STOP. You own the stack. Bring it up in Step 6 with issue-derived isolation, export the URL, and tear it down at finalize.
 - _"The board column is probably called 'Done', I'll just use that"_ — STOP. Read the column names from `## Workflow Config`. Don't guess.
 - _"Let me wait for the human to merge before starting the next ticket"_ — STOP. No auto-merge, no waiting. Ready-for-review then advance.
+- _"This is a big or irreversible call (conflicting MR, work that may already be done, a mistake I just caught) — I'll ask the user which way to go"_ — STOP. You are an **independent** orchestrator; there is no human at the terminal, and `AskUserQuestion` doesn't pause for an answer — it hangs the whole queue. Decide it from the defaults, or — if it's genuinely human-only — **skip-as-blocked / escalate** with a comment and advance. Asking is never one of your moves.
 - _"There's no board, so I can't run"_ — STOP. Board is optional. Fall back to label-only and skip card moves.
 - _"On resume I'll just re-run from implementation to be safe"_ — STOP. Read the MR comments; resume at the first phase that hasn't posted its comment.
 - _"I'll set `isolation: worktree` on the agent so it's clean"_ — STOP. You own one worktree per ticket; per-agent worktrees split the work across trees.
