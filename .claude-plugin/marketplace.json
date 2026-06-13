@@ -8,7 +8,7 @@
     {
       "name": "crew",
       "source": "./crew",
-      "description": "Autonomous GitHub-issue-driven dev loop: /crew:run drives agent-ready issues through implementation, qa, review, and mr-review subagents to ready-for-review MRs. Ships /crew:ticket and /crew:adjust."
+      "description": "Autonomous GitHub-issue-driven dev loop: /crew:run drives agent-ready issues through implementation, qa, review, mr-review, and findings subagents to ready-for-review MRs. Ships /crew:ticket and /crew:adjust."
     }
   ]
 }

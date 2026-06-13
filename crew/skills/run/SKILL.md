@@ -1,6 +1,6 @@
 ---
 name: run
-description: "Autonomous orchestrator loop. Pulls the next agent-ready GitHub issue, processes it end-to-end in a per-ticket git worktree by dispatching crew:implementation → crew:qa → crew:reviewer (with a capped fix loop) → crew:mr-review, then flips the draft MR to ready-for-review and moves to the next issue. GitHub is the source of truth: each agent commits and comments on the MR; the loop never does domain work and never waits for a human merge. Project conventions are read from CLAUDE.md ## Workflow Config at runtime. Use when the user invokes /crew:run."
+description: "Autonomous orchestrator loop. Pulls the next agent-ready GitHub issue, processes it end-to-end in a per-ticket git worktree by dispatching crew:implementation → crew:qa → crew:reviewer (with a capped fix loop) → crew:mr-review → crew:findings (files leftover advisory findings as agent-review backlog tickets), then flips the draft MR to ready-for-review and moves to the next issue. GitHub is the source of truth: each agent commits and comments on the MR; the loop never does domain work and never waits for a human merge. Project conventions are read from CLAUDE.md ## Workflow Config at runtime. Use when the user invokes /crew:run."
 ---
 
 # Run
@@ -9,7 +9,7 @@ description: "Autonomous orchestrator loop. Pulls the next agent-ready GitHub is
 
 You are a **thin orchestrator**. You drive a queue of GitHub issues to shippable MRs by **dispatching subagents** — you never write code, write tests, or perform a review yourself. You read `## Workflow Config` from `CLAUDE.md`, pick the next ticket, set up its worktree, dispatch the phase agents in order, manage the GitHub state around them, and loop.
 
-You are a conductor, not a player. Every unit of real work happens inside a subagent (`crew:implementation`, `crew:qa`, `crew:reviewer`, `crew:mr-review`) dispatched via the Agent tool. Your job between dispatches is bookkeeping: move board cards, read MR comments to learn what happened, decide the next phase, and report.
+You are a conductor, not a player. Every unit of real work happens inside a subagent (`crew:implementation`, `crew:qa`, `crew:reviewer`, `crew:mr-review`, `crew:findings`) dispatched via the Agent tool. Your job between dispatches is bookkeeping: move board cards, read MR comments to learn what happened, decide the next phase, and report.
 
 **GitHub is the source of truth.** There are no numbered state docs on disk and no `_workflow/` folder. Each agent commits its work to the ticket's MR branch and posts its output as an **MR comment**. The GitHub **issue is the spec** — there is no spec phase. The only on-disk working file is the `progress_log`, which lives **outside** the git repo, is **never committed**, and is **deleted** when the MR goes ready-for-review. Anything durable lives on GitHub, which is also what you read to resume.
 
@@ -89,14 +89,14 @@ The worktree is **per ticket and owned by you**. Every agent for this ticket wor
 5. All subsequent dispatches set the agent's working directory to `<worktree-path>`.
 6. Initialize the `progress_log` path: `${TMPDIR:-/tmp}/crew/<owner>-<repo>/<issue#>/progress_log.md`. `mkdir -p` its parent. This path is **outside** the repo and **never** committed. Pass it into every agent prompt.
 
-Announce the plan in one line: `Ticket #<n> "<title>" → worktree <path>, branch <branch>. Running implementation → qa → reviewer → mr-review.`
+Announce the plan in one line: `Ticket #<n> "<title>" → worktree <path>, branch <branch>. Running implementation → qa → reviewer → mr-review → findings.`
 
 ### Step 6 — Bring up the app stack (isolated, per ticket)
 
 **You own the stack lifecycle.** `qa` (e2e) and `reviewer` (Playwright) both run against a live application; bring it up here so they never start their own.
 
 1. Run the configured **start command** with the **isolation scheme** applied — derive ports and data namespaces from the issue number (e.g. `PORT = base + (issue# mod N)`, DB schema / container name suffixed with the issue#) so this ticket never collides with the developer's stack or another ticket. The recipe is config, not hardcoded.
-2. **Wait for readiness** via the configured check (health URL / port).
+2. **Wait for readiness** via the configured check (health URL / port). **Run the readiness poll sandboxed** — never set `dangerouslyDisableSandbox` to reach localhost. That flag prompts a human and **stalls the entire autonomous run** regardless of permission mode (even under `--dangerously-skip-permissions`); §4.10. If a sandboxed check can't reach the stack, find a sandboxed workaround — do not escalate.
 3. **Export the base URL/port** to the env the agents read, and carry it in every `qa` / `reviewer` dispatch prompt.
 
 If the stack can't be brought up, treat it like a blocker: comment, park the card, and continue to the next ticket. The stack is torn down in Step 11.
@@ -162,12 +162,21 @@ Runs only after a reviewer PASS **and a green CI gate (Step 9b)** — so it alwa
 - Task: review the **MR diff cold** — code smells, duplication, dead code, leaky abstractions, naming, complexity, test quality. It does **not** read the other agents' comments, the reviewer's verdict, or the `progress_log` — independence is the point. Post an MR comment with its findings.
 - After it returns: read its MR comment.
   - A **CRITICAL** smell may bounce back to implementation **once**, and that bounce **counts toward the shared 3-round fix cap** (treat it like a fix-loop round routed through Step 9 — increment `F`, then re-confirm CI green per Step 9b and re-dispatch mr-review on the new diff). If the cap is already exhausted, escalate instead.
-  - **MAJOR / MINOR** findings are advisory — record them, proceed to Step 11.
+  - **MAJOR / MINOR** findings are advisory — record them, proceed to Step 10b.
 - **Breakpoint `mr-review`** → pause here.
+
+### Step 10b — Dispatch findings (harvest advisory findings into backlog tickets)
+
+After `mr-review` clears (`PROCEED`, or a `BOUNCE` resolved and re-cleared) and **before finalizing**, dispatch `crew:findings` once. This stops the advisory findings from evaporating (§5.8).
+
+- Task: read the **final** `crew:reviewer` and `crew:mr-review` MR comments, extract their **non-blocking** findings (MINOR, advisory MAJOR, out-of-scope-of-this-MR), **dedup against existing open `agent-review` issues**, and file **one `agent-review` issue per distinct actionable finding** (backlink to the MR + comment, file refs, severity). Post a short `crew:findings` summary comment on the MR listing the filed issue URLs (or "no actionable findings").
+- The filed issues are **`agent-review`, never `agent-ready`** — they stay in the backlog for human planning; the loop must not pick them up.
+- **Non-blocking:** a `crew:findings` failure is logged and does **not** hold up finalize — the MR still ships.
+- **Breakpoint `findings`** → pause here.
 
 ### Step 11 — Tear down, finalize, and advance
 
-On overall pass (reviewer PASS, **CI green** (Step 9b), and mr-review cleared):
+On overall pass (reviewer PASS, **CI green** (Step 9b), mr-review cleared, and `crew:findings` has run (Step 10b)):
 
 1. **Tear down the stack** you brought up in Step 6 (stop the start command / `docker compose down`, release the issue-derived ports and data namespace).
 2. **Delete the `progress_log`** file (`rm -f <progress_log path>`). GitHub now holds the full record.
@@ -193,7 +202,8 @@ On every (re)start, before picking a fresh ticket, reconstruct in-flight state f
    - Latest reviewer comment is **FAIL** → resume in the **fix loop** (Step 9), counting prior FAIL comments toward the cap.
    - Latest reviewer comment is **PASS** but the MR has a **red required check** → resume in the **CI fix loop** (Step 9b), counting prior fix rounds toward the cap.
    - Latest reviewer comment is **PASS**, CI green, no mr-review comment → resume at **Step 10** (mr-review).
-   - mr-review comment present and the MR is still draft → confirm CI is green and that no commit post-dates the mr-review comment (if one does, re-run Step 9b/10), then resume at **Step 11** (finalize).
+   - mr-review comment present, **no `crew:findings` comment yet**, MR still draft → confirm CI is green and that no commit post-dates the mr-review comment (if one does, re-run Step 9b/10), then resume at **Step 10b** (findings).
+   - `crew:findings` comment present and the MR is still draft → resume at **Step 11** (finalize).
 3. **Re-attach the worktree:** if the per-ticket worktree still exists, reuse it; if it was removed but the ticket isn't finalized, recreate it (off the bare clone if present, else the existing checkout) from the existing remote branch (`git worktree add <path> <branch>`). Re-derive the `progress_log` path; **a surviving `progress_log` is a hint, not the truth** — if it disagrees with the MR comments, trust the comments.
 4. **Bring the stack back up** (Step 6) before resuming at any phase that needs it (qa, reviewer); tear it down at finalize.
 5. Finish resuming each in-flight ticket (continue its loop from the resumed phase through Step 11) before Step 2 selects any new `agent-ready` issue.
@@ -202,7 +212,7 @@ On every (re)start, before picking a fresh ticket, reconstruct in-flight state f
 
 ## Breakpoints
 
-Default: **fully autonomous** — no pausing. If the invocation includes `--breakpoint <phase>` (`implement` | `qa` | `review` | `mr-review`), let that phase's subagent finish normally, then:
+Default: **fully autonomous** — no pausing. If the invocation includes `--breakpoint <phase>` (`implement` | `qa` | `review` | `mr-review` | `findings`), let that phase's subagent finish normally, then:
 
 1. Confirm the phase's MR comment posted.
 2. Report: "Paused after `<phase>` on ticket #<n>. MR: <url>. Worktree: <path>. Re-invoke `/crew:run` to continue." The progress lives on the MR; nothing special is needed to resume — Resume Detection picks it back up.
@@ -216,7 +226,7 @@ Breakpoints change *when you pause*, never *what gets produced* — a paused run
 
 Every phase is dispatched the same way via the Agent tool.
 
-- **Agent type:** `agent_type: crew:<phase>` (`crew:implementation`, `crew:qa`, `crew:reviewer`, `crew:mr-review`).
+- **Agent type:** `agent_type: crew:<phase>` (`crew:implementation`, `crew:qa`, `crew:reviewer`, `crew:mr-review`, `crew:findings`).
 - **Model / effort:** `model: opus`, `effort: ultracode`. The heavy reasoning lives in the agents; you stay thin.
 - **Working directory:** the ticket's worktree path. Do **not** set `isolation: worktree` — you own the single per-ticket worktree; per-agent worktrees would split the work.
 - **Background:** dispatch the long phases (implementation, qa, fix-loop rounds) with `run_in_background: true` so you stay responsive to status queries; reviewer and mr-review can run foreground.
@@ -240,6 +250,7 @@ Each agent prompt must carry:
 When Step 2 finds no actionable ticket, stop and report:
 
 - **Shipped:** each ticket taken to ready-for-review this run — issue #, title, MR URL.
+- **Findings filed:** the count of `agent-review` backlog tickets `crew:findings` opened this run (with their issue #s), so the human sees what's queued for planning.
 - **Escalated:** each ticket that hit the 3-round cap — issue #, MR URL (still draft), the column it was parked in, and the recurring finding.
 - **Skipped:** each ticket triaged out this run — issue #, and whether it was a blocker (with the reason) or an epic/parent.
 - **Queue:** "No actionable `agent-ready` issues remain" (or the count still open but not pickable, e.g. already in-flight elsewhere or skipped).
@@ -265,6 +276,9 @@ Then stop. Do not poll for new tickets unless re-invoked.
 - **Gate on live CI** — a red required check on the MR is a fix trigger; mr-review runs only once CI is green, and you never flip to ready-for-review over a red check.
 - Escalate with full context at the cap — leave the MR draft, comment, park the card, and **move on to the next ticket**.
 - Flip the MR to ready-for-review and move the card to In review on overall pass, then **continue without waiting for a human merge**.
+- After `mr-review` clears, dispatch **`crew:findings`** (Step 10b) to file the advisory reviewer/mr-review findings as **`agent-review`** backlog tickets — **never `agent-ready`** — before finalizing. It's non-blocking; a failure doesn't hold up the MR.
+- **Keep every command sandboxed** — never set `dangerouslyDisableSandbox` (it prompts a human and stalls the run, even under skip-permissions); poll readiness from inside the sandbox (§4.10).
+- **Verify every GitHub write landed** — re-fetch and confirm a comment / body-edit / label / card-move / state-flip actually took effect; edit MR bodies with `gh api -X PATCH`, never `gh pr edit` (§4.11).
 - Run label-only when no board is configured — skip every card move silently.
 
 **DON'T:**
@@ -301,3 +315,6 @@ If you catch yourself thinking any of these, stop:
 - _"On resume I'll just re-run from implementation to be safe"_ — STOP. Read the MR comments; resume at the first phase that hasn't posted its comment.
 - _"I'll set `isolation: worktree` on the agent so it's clean"_ — STOP. You own one worktree per ticket; per-agent worktrees split the work across trees.
 - _"The user wrote `crew update` once, I should mention the npm flow"_ — STOP. V2 is a plugin only. No npm, no CLI, no distribution references.
+- _"I'll disable the sandbox just for the readiness curl"_ — STOP. `dangerouslyDisableSandbox` prompts a human and stalls the whole autonomous run, even under skip-permissions. Poll sandboxed; work around failures sandboxed (§4.10).
+- _"mr-review passed, I'll finalize now — the MINOR findings are only advisory"_ — STOP. Dispatch `crew:findings` first (Step 10b) to file them as `agent-review` backlog tickets (never `agent-ready`). Advisory findings shouldn't evaporate.
+- _"`gh pr edit` exited non-zero but it probably worked"_ — STOP. Use `gh api -X PATCH` and **re-fetch to confirm** the write landed. GitHub is the source of truth; a silent no-op corrupts it (§4.11).

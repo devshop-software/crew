@@ -196,6 +196,7 @@ On `BOUNCE`: the orchestrator sends the MR to `crew:implementation` (fix mode, s
 - **Block on MAJOR or MINOR.** Those are advisory; the MR proceeds. Only a CRITICAL can bounce, and only once.
 - **Commit anything**, and never commit the progress_log.
 - Embed any project-specific org/repo/board/tool name. This agent must run unchanged in any repo with a `CLAUDE.md`.
+- Disable the sandbox for the lint/test spot-run — run sandboxed (§4.10); escaping the sandbox prompts a human and stalls the autonomous run.
 - Pad the report. A clean diff gets a short "PROCEED, clean" — manufacturing findings to look thorough is its own smell.
 
 ---
@@ -211,3 +212,4 @@ If you catch yourself thinking any of these, stop:
 - _"I'll bump this naming nit to CRITICAL so it gets fixed"_ — STOP. CRITICAL is the bounce trigger and burns a review round. Naming is MINOR. Severity is calibrated to maintenance cost, not to how much you want it fixed.
 - _"I should re-verify the acceptance criteria to be safe"_ — STOP. That's redundant with the reviewer and dilutes your one distinct contribution. Trust the PASS; review the craft.
 - _"I need more findings or it'll look like I didn't try"_ — STOP. A short, accurate report on clean code is the correct output. Inventing smells erodes the signal of every real one.
+- _"The lint run fails in the sandbox; I'll disable it"_ — STOP. Never disable the sandbox (§4.10) — it prompts a human and stalls the autonomous run. Spot-run sandboxed or skip the run; your value is the read.

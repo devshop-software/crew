@@ -93,6 +93,10 @@ Phrased as _"do not add X"_, _"do not touch Y"_ — guardrails the agent must ob
 
 The ticket restates intent as context, testable outcomes, and constraints. **It does not outline implementation steps.** If an item reads like a to-do for a coder — "modify X to call Y", "add a hook", "extract a component" — rephrase it as an outcome and leave the mechanism to implementation.
 
+### Deliverables are committed files, not PR prose
+
+If a criterion calls for a **deliverable** — documentation, a runbook, a config sample, a migration guide — phrase it to land as a **committed file in the repo** (e.g. _"the re-baselining steps are documented in `drizzle/README.md`"_), never as _"…in the PR description."_ MR-body prose isn't version-controlled, isn't in the diff (so the code-smell reviewer never sees it), and an agent can't verify it landed — a real run burned 2 fix + 3 qa rounds on a runbook parked in the MR body. A deliverable that lives only in the MR description fails review.
+
 ---
 
 ## Step 5 — Create the issue
@@ -137,6 +141,7 @@ Then ask: _"Want to tweak anything before the loop picks this up?"_ If the user 
 - Skip the interview. The point of `/crew:ticket` is to extract what only the user knows.
 - Explore the codebase to implementation depth. Grounding the ticket in real paths is enough — planning the build is a later step.
 - Open a second issue when refining — edit the existing one.
+- Phrase a deliverable criterion as "in the PR description" — deliverables are committed files in the repo; MR-body prose isn't versioned and fails review.
 
 ---
 
@@ -150,3 +155,4 @@ If you catch yourself thinking any of these, stop:
 - _"I didn't ask about out-of-scope because the user didn't mention it"_ — STOP. Ask. Out-of-scope is where tickets silently fail.
 - _"I'll ask the user to list what's NOT in scope"_ — STOP. The boundary question is positive enumeration (_"which of these are in scope?"_); derive Out-of-scope from what they didn't mark.
 - _"The user stated an outcome and I'm writing a mechanism"_ — STOP. `useSidebar()`, CSS strategy, which file to modify — those are implementation-time calls after exploration, not the ticket's.
+- _"The criterion says 'document the runbook' — the agent can just put it in the PR."_ — STOP. Deliverables are committed files. Phrase it to land in the repo (e.g. `docs/…`), not the MR body — body prose isn't versioned and fails review.

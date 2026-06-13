@@ -144,6 +144,8 @@ This is the first dispatch, so **you** open the MR that carries the ticket for t
    `gh pr create --draft --title "<feature title> (#<issue>)" --body "Closes #<issue>"`
    When the body is more than a line, write it to a `mktemp` file and use `--body-file` — **keep `Closes #<issue>` as the first line of that file.** Then verify the link actually registered: `gh pr view <mr> --json closingIssuesReferences` must list #<issue> (if it doesn't, the keyword is missing or malformed — fix the body). Capture the MR URL/number.
 
+The MR body is a **write-once summary** — write it once here and **never park a deliverable in it**. Anything that satisfies an acceptance criterion must be a **committed file in the diff** (e.g. a runbook or doc goes in `docs/` / a `README`, not the MR description): MR-body prose isn't version-controlled, isn't in the diff (so `crew:mr-review` never sees it), and can't be verified without a live fetch (§4.3). If you ever must correct the body, edit it with `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -f body=@<file>` — **not `gh pr edit`, which can silently abort on this repo** — and **re-fetch the live body to confirm** the change actually landed before you report DONE (§4.11).
+
 The MR stays **draft** — only the orchestrator flips it to ready-for-review at the very end. You never mark it ready and you never merge.
 
 ---
@@ -259,7 +261,8 @@ Return the MR number and status to the orchestrator. `crew:run` re-runs `crew:qa
 - Open a second branch or MR — one MR per ticket; mark it ready-for-review or merge it (that's the orchestrator's, asynchronously, with a human).
 - Hardcode any org/repo/board/label name — everything project-specific comes from `CLAUDE.md` at runtime.
 - Add features, refactors, or improvements beyond the acceptance criteria, or cross an **Out of scope** line.
-- Touch the e2e tree (`.feature`, e2e `.spec.ts`, page objects, fixtures, helpers) or run `e2e-cmd` — that's `crew:qa`.
+- Touch the e2e tree (`.feature`, e2e `.spec.ts`, page objects, fixtures, helpers) or run `e2e-cmd` — that's `crew:qa`. This includes **editing a shared e2e fixture** (`test-fixtures.ts` and the like) "just to support your change" — note what the behavior needs and let qa own it, so the fixture change flows through qa → reviewer instead of riding in on your commit.
+- Park a deliverable in the **MR body** — anything satisfying an acceptance criterion is a committed file in the diff; the body is a write-once summary (§4.3). Edit a body only via `gh api -X PATCH` and verify it landed (§4.11). Never disable the sandbox (§4.10).
 - In fix mode, re-implement the feature — fix only what the reviewer flagged.
 - Claim done without showing check results; leave any check red.
 
@@ -278,6 +281,10 @@ If you catch yourself thinking any of these, stop:
 - _"This file is outside the issue but it needs changing."_ — STOP. Log it as a deviation; don't silently expand scope — and never cross an Out-of-scope line.
 - _"A check is failing but it's not my fault."_ — STOP. Get it green anyway and log it as a pre-existing fix. You hand off green.
 - _"I'll quickly fix this e2e test my change broke."_ — STOP. The e2e tree is `crew:qa`'s. Note the breakage in your comment and let qa adapt — it's signal, not a chore for you.
+- _"My change needs a new fixture row / I'll just tweak the shared `test-fixtures` file."_ — STOP. e2e fixtures and helpers are `crew:qa`'s, even shared ones. State what data the behavior needs in your comment; qa owns the fixture change so it flows through qa → reviewer, not in on your commit.
+- _"I'll document this runbook / note in the PR description."_ — STOP. The MR body is a write-once summary, not a deliverable. If an acceptance criterion asks for documentation, it's a **committed file** in the diff (§4.3) — the body isn't version-controlled and `mr-review` never sees it.
+- _"I edited the MR body and the command returned, so it's done."_ — STOP. `gh pr edit` can abort silently on this repo. Use `gh api -X PATCH` and **re-fetch the live body to confirm** the edit is actually there before reporting DONE (§4.11).
+- _"This command fails in the sandbox; I'll re-run it with the sandbox disabled."_ — STOP. Never disable the sandbox (§4.10) — it prompts a human and stalls the unattended run. Find a sandboxed workaround.
 - _"In fix mode I'll also tidy up this nearby thing."_ — STOP. Fix mode touches only what the reviewer flagged, on the same branch.
 - _"I've gone back and forth on this fix a few times, one more try."_ — COUNT. If that's attempt 3, stop and escalate via the comment as BLOCKED.
 - _"I'll open a fresh MR for the fix."_ — STOP. One MR per ticket. Commit to the existing branch.
