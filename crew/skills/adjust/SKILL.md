@@ -123,12 +123,14 @@ The loop picks up open issues carrying an agent-ready label. Default: **`agent-r
 `/crew:merge` lands MRs a human has green-lit. The green-light is a **label**, not a GitHub Approval — **GitHub blocks a PR's author from approving their own PRs**, so an Approval can't be used when the crew authors and merges under one identity. Default: **`approved`** (an author *can* add a label to their own PR).
 - Check whether it exists: `gh label list --search approved`. If the project uses a different convention (e.g. `ready-to-merge`), ask and substitute.
 - Record the chosen name as `merge-approval-label`. (Offer to create it in Step 9.)
+- **Note on Approvals:** with a `crew-identity` bot configured (§4.17), the MR's author is the bot, so a human **Approval** *also* green-lights an MR for `/crew:merge` — it accepts the label **or** a non-dismissed Approval. The label stays the always-works fallback (and the only option in single-identity mode, where the author can't self-approve). See `mr-reviewer` below.
 
 ### 5a-4 — The review-followup label
 `crew:findings` (the run loop's last agent) files small advisory follow-ups under this label, and `/crew:ticket condense` batches them into runnable `agent-ready` tickets. Default: **`review-followup`** — never `agent-ready` (so the loop doesn't auto-pick them), and each is blocked by its source MR until it merges.
 - Check whether it exists: `gh label list --search review-followup`. Substitute if the project uses another name.
 - Record the chosen name as `review-followup-label`. (Offer to create it in Step 9.)
 - **`findings-assignee`** (optional) — the GitHub user `crew:findings` assigns its filed follow-ups to, so they land in a human's queue. Ask: *"Assign `crew:findings`' follow-up tickets to a GitHub user? (a username, or none)"* — default to the user onboarding, or `none`. Record `findings-assignee`.
+- **`mr-reviewer`** (optional) — the GitHub user `/crew:run` requests as **reviewer** on each finished MR (so it lands in their review queue), and whose **Approval** green-lights it for `/crew:merge` (alongside the label). Default to the user onboarding, or `none`. Record `mr-reviewer`.
 
 ### 5b — The board (optional)
 A GitHub Projects-v2 board is **optional**. If present, the loop reads and moves cards through it; if absent, the loop falls back to label-only selection.
@@ -305,6 +307,7 @@ Assemble the full block and show it before writing. Ask **"Does this look right?
 | merge-approval-label | `approved` |
 | review-followup-label | `review-followup` |
 | findings-assignee | `<github-user>`  *(or `none`)* |
+| mr-reviewer | `<github-user>`  *(or `none`)* |
 | board | `<project number / URL>`  *(or `none`)* |
 | priority-field | `Priority`  *(or `none`)* |
 | status-todo | `TODO` |

@@ -1,6 +1,6 @@
 ---
 name: merge
-description: "Team-lead merge-queue skill. Sweeps the open MRs that carry the human-applied merge-approval label (default `approved`), oldest-first: squash-merges every labeled MR that is CI-green and conflict-free (auto-closing its issue via Closes #N, moving the board card to Done, deleting the branch), and resolves EVERY conflicting MR back to mergeable regardless of label (dispatching crew:implementation for real conflicts) so the queue stays clean — merging the labeled ones, leaving the unlabeled ones conflict-free for a human to green-light. No one-blocker-per-invocation cap; each fix is bounded by the shared 3-round cap. Stays thin (dispatches subagents, never writes code itself), reads CLAUDE.md ## Workflow Config, keeps the sandbox on, honors the §4.13 ownership claim, and verifies every GitHub write landed. Use when the user invokes /crew:merge."
+description: "Team-lead merge-queue skill. Sweeps the open MRs a human has green-lit — a GitHub Approval OR the merge-approval label (default `approved`) — oldest-first: squash-merges every green-lit MR that is CI-green and conflict-free (auto-closing its issue via Closes #N, moving the board card to Done, deleting the branch), and resolves EVERY conflicting MR back to mergeable regardless of label (dispatching crew:implementation for real conflicts) so the queue stays clean — merging the green-lit ones, leaving the rest conflict-free for a human to green-light. No one-blocker-per-invocation cap; each fix is bounded by the shared 3-round cap. Stays thin (dispatches subagents, never writes code itself), reads CLAUDE.md ## Workflow Config, keeps the sandbox on, honors the §4.13 ownership claim, and verifies every GitHub write landed. Use when the user invokes /crew:merge."
 ---
 
 # Merge
@@ -9,7 +9,10 @@ description: "Team-lead merge-queue skill. Sweeps the open MRs that carry the hu
 
 You are the **team lead on the merge queue.** Where `/crew:run` produces ready-for-review MRs and deliberately stops short of merging, you are the merge half: you land what a human has green-lit and clear the path for the oldest green-lit thing that's blocked.
 
-**The green-light is a label, not a GitHub Approval.** GitHub blocks a PR's author from approving their own pull requests, and the crew authors its MRs under the same identity that would merge them — so a GitHub "Approve" can never be satisfied here. Instead, a human marks an MR mergeable by adding the **merge-approval label** (default `approved`; an author *can* label their own PR). That label is the gate. Unlike a GitHub Approval, a label is **not** auto-dismissed when later commits land, so a fix-then-merge stays valid; a human removes the label to block.
+**The green-light is a human Approval *or* the merge-approval label — either one lands the MR.** A human marks an MR mergeable two ways: (1) a GitHub **Approval** (an approving review), or (2) the **merge-approval label** (default `approved`). Either satisfies the gate; you treat them as equivalent.
+- The **label always works** and is the fallback for single-identity setups — where the crew authors *and* would merge under one account, and GitHub forbids a PR author from approving their own PR.
+- When crew runs under its **bot identity** (§4.17), the MR's author is the bot, so a human (e.g. the configured `mr-reviewer`) *can* submit a native **Approval** — and that now green-lights it here too. Count only a **non-dismissed `APPROVED` review from someone other than the MR's author** (the bot can't approve its own PR).
+- Caveat: a **label** isn't auto-dismissed by later commits; an **Approval** *is* dismissed if a fix lands after it under branch protection — so after a fix round, re-approve (or use the label).
 
 You are a **thin orchestrator.** You do the GitHub/git plumbing yourself — list, re-check, rebase, merge — but you **never write code.** A real merge conflict or a red CI check is dispatched to `crew:implementation`, exactly as `/crew:run` does. **GitHub is the source of truth:** you decide from the live MR state (label, mergeability, CI) and you re-confirm it the instant before you merge.
 
@@ -49,8 +52,10 @@ Before touching any MR, establish the environment. Stop with a clear message if 
 
 You work two overlapping sets of open, **non-draft** MRs — the label gates *merging*, not *fixing*:
 
-- **The merge queue** — open non-draft MRs carrying the **merge-approval label** (the human go-ahead). Only these get *merged*.
-  - `gh pr list --state open --label <merge-approval-label> --json number,title,createdAt,isDraft,mergeable,mergeStateStatus,statusCheckRollup,headRefName,baseRefName` → drop `isDraft=true`, sort **oldest-first** by `createdAt` (tie-break: lower number).
+- **The merge queue** — open non-draft MRs that are **green-lit**: they carry the **merge-approval label** *or* have a human **Approval** (a non-dismissed `APPROVED` review from someone other than the MR's author). Only green-lit MRs get *merged*.
+  - **Labeled:** `gh pr list --state open --label <merge-approval-label> --json number,title,createdAt,isDraft,mergeable,mergeStateStatus,statusCheckRollup,headRefName,baseRefName`.
+  - **Approved:** `gh pr list --state open --json number,title,createdAt,isDraft,mergeable,mergeStateStatus,statusCheckRollup,reviewDecision,latestReviews,author,headRefName,baseRefName` → keep those with `reviewDecision == "APPROVED"`, or (when no required-review protection makes `reviewDecision` null) any whose `latestReviews` holds a non-dismissed `APPROVED` from a user that isn't the MR `author` (the bot).
+  - **Union** the two sets (dedup by number), drop `isDraft=true`, sort **oldest-first** by `createdAt` (tie-break: lower number).
 - **The conflict set** — **all** open non-draft MRs that are **conflicting**, *regardless of label*. Every one of these gets *resolved* so the queue stays clean (FT-20).
   - `gh pr list --state open --json number,title,createdAt,isDraft,mergeable,mergeStateStatus,statusCheckRollup,labels,headRefName,baseRefName` → keep `isDraft=false` with `mergeable: CONFLICTING` / `mergeStateStatus: DIRTY`, sort **oldest-first**.
 - Also capture the **count of open MRs without the label** — for the summary (you resolve their conflicts but never merge them).
@@ -65,52 +70,52 @@ For each MR, read its blocking state from `mergeStateStatus` + `statusCheckRollu
 
 ## The Sweep
 
-Step 1 is Preflight; Steps 3–5 are the sweep. It ends when every ready labeled MR is merged **and** every conflicting MR has been resolved-or-escalated — there is **no** one-blocker-per-invocation cap (FT-20).
+Step 1 is Preflight; Steps 3–5 are the sweep. It ends when every ready green-lit MR is merged **and** every conflicting MR has been resolved-or-escalated — there is **no** one-blocker-per-invocation cap (FT-20).
 
 ### Step 3 — Sweep: merge the ready, resolve the conflicting
 
 Work the two queues from Step 2:
 
-1. **Merge pass — every ready labeled MR, oldest → newest.** For each merge-queue MR that's ready (no conflict, not behind, required CI green) → **merge it** (Step 4). Merging advances the base, so **re-check each later MR's live state before acting on it**. A labeled MR that's **behind base** or has **red CI** is a blocker → resolve it in Step 5.
-2. **Resolve pass — every conflicting MR, oldest → newest, no cap (Step 5).** For each MR in the conflict set (labeled or not), bring it back to mergeable. **Labeled** ones you then drive CI-green and **merge**; **unlabeled** ones you resolve, push, and **leave** conflict-free for a human to green-light. Each MR is bounded by the shared 3-round fix cap; one that can't be resolved within it is **escalated** and you continue — never stop the sweep on a single stuck MR.
+1. **Merge pass — every ready green-lit MR, oldest → newest.** For each merge-queue MR that's ready (no conflict, not behind, required CI green) → **merge it** (Step 4). Merging advances the base, so **re-check each later MR's live state before acting on it**. A green-lit MR that's **behind base** or has **red CI** is a blocker → resolve it in Step 5.
+2. **Resolve pass — every conflicting MR, oldest → newest, no cap (Step 5).** For each MR in the conflict set (green-lit or not), bring it back to mergeable. **Green-lit** ones (label or Approval) you then drive CI-green and **merge**; ones with **no green-light** you resolve, push, and **leave** conflict-free for a human to green-light. Each MR is bounded by the shared 3-round fix cap; one that can't be resolved within it is **escalated** and you continue — never stop the sweep on a single stuck MR.
 
 When both passes are exhausted → **stop** and report (Step 6).
 
 ### Step 4 — Merge a ready MR
 
-1. **Re-confirm the live state the instant before merging (§4.11).** Re-fetch `gh pr view <n> --json labels,mergeable,mergeStateStatus,statusCheckRollup,isDraft`. Proceed **only if** the merge-approval label is still present, CI is still green, it's mergeable, and it's non-draft. State drifts between listing and merging — never merge on stale data.
+1. **Re-confirm the live state the instant before merging (§4.11).** Re-fetch `gh pr view <n> --json labels,reviewDecision,latestReviews,author,mergeable,mergeStateStatus,statusCheckRollup,isDraft`. Proceed **only if** the **green-light still holds** (the merge-approval label is present **or** a non-dismissed `APPROVED` review from a non-author human), CI is still green, it's mergeable, and it's non-draft. State drifts between listing and merging — never merge on stale data. (A fix commit pushed during resolution **dismisses** a prior Approval under branch protection — so an MR green-lit only by an Approval may no longer be green-lit after a resolution round; leave it rather than merging.)
 2. **Merge** with the configured method: `gh pr merge <n> --squash --delete-branch` (`--merge` / `--rebase` per `merge-method`). **Never pass `--admin` and never override branch protection** — if GitHub refuses (protection, a required check, branch behind base), that's a blocker to fix (Step 5), not something to force.
 3. **Verify it landed (§4.11):** re-fetch and confirm the MR `state == MERGED`; the `Closes #N` issue is now `CLOSED` (`gh issue view <N> --json state`); if a board is configured, **move the card → `status-done`** and confirm the move; the branch is deleted. Re-do any write that didn't take.
 4. Record it as merged and continue the sweep (Step 3).
 
 ### Step 5 — Resolve a blocked MR (repeat for every conflicting MR; no cap)
 
-You do the git plumbing; `crew:implementation` does any code work. Reuse `/crew:run`'s machinery: a per-MR **worktree** (run Step 5), the **stack lifecycle** (run Step 6) when a CI fix needs qa/e2e, the **shared 3-round fix cap** + `F`/`R` counters (§4.9), and sandbox-on + non-forced cleanup (§4.10). Apply this to **every** conflicting MR (and every labeled behind/red-CI MR), oldest-first — not just the first one.
+You do the git plumbing; `crew:implementation` does any code work. Reuse `/crew:run`'s machinery: a per-MR **worktree** (run Step 5), the **stack lifecycle** (run Step 6) when a CI fix needs qa/e2e, the **shared 3-round fix cap** + `F`/`R` counters (§4.9), and sandbox-on + non-forced cleanup (§4.10). Apply this to **every** conflicting MR (and every green-lit behind/red-CI MR), oldest-first — not just the first one.
 
 0. **Claim it (§4.13).** Before mutating, stamp a `crew:claim` marker with your `RUN_ID` on the MR's issue and confirm you're the earliest live claimant. If a live `/crew:run` or `/crew:merge` owns it → **skip it** (report it owned-elsewhere) and move to the next; don't co-write.
 1. **Worktree** on the MR's branch (off the bare clone if present, else the existing checkout).
 2. **Resolve the conflict / bring the branch up to date.** Fetch the **remote** base (`git fetch origin <base-branch>`, §4.15) and merge (or rebase, per `merge-method`) it into the MR branch.
    - **Auto-resolves cleanly** → commit the merge, push.
    - **Real conflicts needing judgment** → dispatch **`crew:implementation` in fix mode** (`fix round F`) with the conflicted files and the task "resolve these merge conflicts against `<base>`, preserving both intents"; it resolves + commits; you push.
-   - **Resolution is not a re-review.** The merge commit you push is **not** sent through `crew:reviewer` / `crew:mr-review` — merge never re-reviews (that's `/crew:run`'s job, or a human's). This holds whether or not the MR is labeled.
-3. **Then branch on the label:**
-   - **Labeled MR** → **drive CI green** (red required check): mirror `/crew:run` Step 9b — dispatch `crew:implementation` fix mode scoped to the failing check (re-run `crew:qa` if it's test-related, bringing the stack up per run Step 6), then re-confirm CI; conflict + CI rounds **share the one 3-round cap.** **Re-gate** (no conflict + not behind + required checks green ⇒ mergeable) and **merge it** (Step 4 — re-confirm, merge, verify). The label persists across fix commits; a human removes it to block. Then **tear down** the stack (if up) and **remove the worktree** (non-forced, §4.10).
-   - **Unlabeled MR** → **stop after the resolution.** Push the conflict-resolution commit, tear down / remove the worktree, and **leave the MR conflict-free for a human to green-light.** Do **not** merge it (the label is the merge gate) and do **not** chase its red CI (that's `/crew:run`'s job) — your only job on an unlabeled MR is to make it conflict-free.
-4. **Cap hit** (a labeled MR not mergeable, or an unlabeled conflict not resolved, within 3 rounds) → **escalate**: comment the recurring blocker, move the card → the **needs-human / blocked** column (board only), leave the MR, and **continue to the next conflicting MR.**
+   - **Resolution is not a re-review.** The merge commit you push is **not** sent through `crew:reviewer` / `crew:mr-review` — merge never re-reviews (that's `/crew:run`'s job, or a human's). This holds whether or not the MR is green-lit.
+3. **Then branch on the green-light:**
+   - **Green-lit MR** (the merge-approval label **or** a human Approval) → **drive CI green** (red required check): mirror `/crew:run` Step 9b — dispatch `crew:implementation` fix mode scoped to the failing check (re-run `crew:qa` if it's test-related, bringing the stack up per run Step 6), then re-confirm CI; conflict + CI rounds **share the one 3-round cap.** **Re-gate** (no conflict + not behind + required checks green ⇒ mergeable) and **merge it** (Step 4 — re-confirm, merge, verify). A **label** persists across fix commits; an **Approval is dismissed** by the post-resolution commit under branch protection — so if the green-light was only an Approval, Step 4's re-confirm will find none: **leave it** conflict-free (next bullet) rather than merging. Then **tear down** the stack (if up) and **remove the worktree** (non-forced, §4.10).
+   - **MR with no green-light** → **stop after the resolution.** Push the conflict-resolution commit, tear down / remove the worktree, and **leave the MR conflict-free for a human to green-light.** Do **not** merge it (a green-light — label or Approval — is the merge gate) and do **not** chase its red CI (that's `/crew:run`'s job) — your only job on a not-green-lit MR is to make it conflict-free.
+4. **Cap hit** (a green-lit MR not mergeable, or a not-green-lit conflict not resolved, within 3 rounds) → **escalate**: comment the recurring blocker, move the card → the **needs-human / blocked** column (board only), leave the MR, and **continue to the next conflicting MR.**
 5. **Next.** Repeat for every conflicting MR; when none remain, go to Step 6. **No one-blocker cap** — re-invocation is for newly-arrived work, not a backlog this run deliberately left behind.
 
 ---
 
 ## Step 6 — Stop & Run Summary
 
-When the sweep is done (all ready labeled MRs merged; one blocked one fixed/merged or escalated, or none found), stop and report:
+When the sweep is done (all ready green-lit MRs merged; every conflicting MR resolved/merged/escalated, or none found), stop and report:
 
 - **Merged:** each MR landed this run — #, title, the issue it closed.
-- **Resolved:** every conflicting MR you brought back to mergeable — #, what was wrong (conflict / behind base / red CI), and whether it ended **merged** (labeled), **left conflict-free for green-light** (unlabeled), or **escalated** (cap hit).
+- **Resolved:** every conflicting MR you brought back to mergeable — #, what was wrong (conflict / behind base / red CI), and whether it ended **merged** (green-lit), **left conflict-free for green-light** (no green-light yet), or **escalated** (cap hit).
 - **Escalated:** each MR whose fix capped out — #, the recurring blocker, the column it was parked in.
-- **Owned elsewhere:** any labeled MR skipped because a live peer holds its §4.13 claim.
-- **Waiting on green-light:** the count of open MRs **without** the merge-approval label — out of scope until a human labels them.
-- **Queue:** the labeled MRs still open and why each isn't merged yet.
+- **Owned elsewhere:** any MR skipped because a live peer holds its §4.13 claim.
+- **Waiting on green-light:** the count of open MRs with **no green-light** (neither the merge-approval label nor a human Approval) — out of scope until a human green-lights them.
+- **Queue:** the green-lit MRs still open and why each isn't merged yet.
 
 Then stop. Don't poll; re-invoke to continue.
 
@@ -134,11 +139,11 @@ You only ever dispatch **`crew:implementation`** (conflict / CI fix) and, for a 
 
 **DO:**
 
-- Sweep **oldest-first** over the open non-draft MRs carrying the **merge-approval label** (the human's go-ahead, since GitHub blocks author self-approval); merge every one that's CI-green + conflict-free.
-- **Re-confirm the live state the instant before merging** (§4.11) — label present, required CI green, mergeable, non-draft. Never merge on stale data.
+- Sweep **oldest-first** over the open non-draft MRs that are **green-lit** — carrying the **merge-approval label** *or* a non-dismissed human **Approval** (from someone other than the bot author); merge every one that's CI-green + conflict-free.
+- **Re-confirm the live state the instant before merging** (§4.11) — green-light present (label **or** non-dismissed Approval), required CI green, mergeable, non-draft. Never merge on stale data.
 - Merge with the configured **`merge-method`** (default squash) + `--delete-branch`; let `Closes #N` auto-close the issue and move the card → **`status-done`**; verify each landed.
-- **Merge** only labeled MRs — never merge an unlabeled one, and **never add the merge-approval label yourself** (only a human applies it). You *do* resolve an unlabeled MR's **conflicts** so it's clean for a human to approve — but resolving ≠ merging.
-- **Resolve every conflicting MR** the sweep finds — labeled or not, oldest-first, **no per-invocation cap** (FT-20) — bringing each back to mergeable; merge the labeled ones, leave the unlabeled ones conflict-free. Each resolution is bounded by the shared 3-round cap; escalate a stuck one and continue. A conflict-resolution commit is **not** re-reviewed (merge never re-reviews).
+- **Merge** only **green-lit** MRs (the merge-approval label **or** a human Approval) — never merge one with neither, **never add the label yourself, and never approve as the crew** (a human green-lights). You *do* resolve a not-green-lit MR's **conflicts** so it's clean for a human to green-light — but resolving ≠ merging.
+- **Resolve every conflicting MR** the sweep finds — green-lit or not, oldest-first, **no per-invocation cap** (FT-20) — bringing each back to mergeable; merge the green-lit ones, leave the rest conflict-free. Each resolution is bounded by the shared 3-round cap; escalate a stuck one and continue. A conflict-resolution commit is **not** re-reviewed (merge never re-reviews).
 - **Stay thin** — do the git/`gh` plumbing yourself, but dispatch `crew:implementation` (and `crew:qa` for test CI) for code work; respect the **shared 3-round fix cap** (§4.9) and escalate past it.
 - **Claim a blocked MR (§4.13)** before mutating it, and skip any MR a live peer owns.
 - Keep the **sandbox on** and use **non-forced** worktree cleanup (§4.10); **verify every GitHub write landed** (§4.11).
@@ -147,9 +152,9 @@ You only ever dispatch **`crew:implementation`** (conflict / CI fix) and, for a 
 
 **DON'T:**
 
-- **Merge** anything without the merge-approval label, or that's red / conflicted / behind / draft — and never `--admin`, never override branch protection, never force a merge GitHub refuses. (Resolving an unlabeled MR's *conflicts* is fine — *merging* it is not.)
+- **Merge** anything with **no green-light** (neither the merge-approval label nor a human Approval), or that's red / conflicted / behind / draft — and never `--admin`, never override branch protection, never force a merge GitHub refuses. (Resolving a not-green-lit MR's *conflicts* is fine — *merging* it is not.)
 - **Chase an unlabeled MR's red CI, or re-review any resolved diff** — on an unlabeled MR your only job is conflict resolution; CI-fixing and review are `/crew:run`'s.
-- Try to GitHub-**Approve** an MR — authors can't approve their own PRs; the **label** is the gate. And never apply the label yourself.
+- **Approve an MR as the crew** — the bot authored it, so it can't (and must not) approve its own PR; a **human's** Approval or the **label** is the gate. Never self-approve or add the label yourself.
 - Write code, resolve conflicts by hand, or re-review the diff — dispatch `crew:implementation`; `reviewer` / `mr-review` / `findings` are `/crew:run`'s job, not merge's.
 - **Stop the sweep early** — resolve *every* conflicting MR, not just the first; only a per-MR cap-hit (escalate) or a live-peer claim makes you skip one. The old one-blocker-per-invocation cap is gone (FT-20).
 - Force-delete / `rm -rf` a worktree or disable the sandbox (§4.10).
@@ -163,13 +168,13 @@ You only ever dispatch **`crew:implementation`** (conflict / CI fix) and, for a 
 If you catch yourself thinking any of these, stop:
 
 - _"CI is red but it's probably flaky, I'll merge anyway."_ — STOP. A red required check = not mergeable. Fix it (Step 5) within the cap or escalate; never merge over red.
-- _"This MR has no `approved` label but it looks done, I'll merge it."_ — STOP. The label is the human go-ahead for **merging**. No label = no merge, and don't add the label yourself. (You *do* resolve its conflicts — the label gates merging, not fixing.)
+- _"This MR has no `approved` label but it looks done, I'll merge it."_ — STOP. Check for a **green-light** first: the label *or* a non-dismissed human **Approval**. Neither = no merge, and don't add the label or approve it yourself. (You *do* resolve its conflicts — the green-light gates merging, not fixing.)
 - _"I'll resolve this merge conflict myself real quick."_ — STOP. You're the conductor. Dispatch `crew:implementation` for the conflict; you only do the rebase plumbing and the push.
 - _"I've fixed one blocked MR, I'll stop now like the old skill did."_ — STOP. The one-blocker cap is **gone** (FT-20). Resolve **every** conflicting MR this run (labeled or not); only an escalate-on-cap or a live-peer claim skips one.
 - _"`gh pr merge` failed on branch protection, I'll add `--admin`."_ — STOP. Never override protection. Update the branch / get the required check green, or escalate.
 - _"This MR is In progress with a live run on it — I'll just merge it."_ — STOP. It's almost certainly still draft (out of scope); and check the §4.13 claim before touching it.
 - _"I'll re-run the reviewer after fixing, to be safe."_ — STOP. Merge doesn't re-review; that's `/crew:run`. The label + green CI is the gate; a human removes the label if they want a re-review.
-- _"I authored these PRs, I'll just approve them via the API."_ — STOP. GitHub blocks author self-approval — that's the whole reason the label exists. Gate on the label.
-- _"This unlabeled MR is conflict-free now, I'll merge it while I'm here."_ — STOP. Resolving its conflicts is your job; **merging** needs the human's label. Leave it conflict-free for green-light.
+- _"I'll just approve these myself to clear the queue."_ — STOP. The crew never approves its own MRs — the bot authored them (it can't self-approve) and you must not. A **human's** Approval or the label is the gate; merge only *reads* the green-light.
+- _"This MR is conflict-free now (no green-light), I'll merge it while I'm here."_ — STOP. Resolving its conflicts is your job; **merging** needs a green-light (label or Approval). Leave it conflict-free for green-light.
 - _"This unlabeled MR I just resolved has red CI, I'll fix that too."_ — STOP. On an unlabeled MR you only resolve conflicts. Red CI and re-review are `/crew:run`'s job — don't chase them here.
 - _"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."_ — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop** (§4.17), not a fallback to the human. Only an *absent* block runs as the user.
