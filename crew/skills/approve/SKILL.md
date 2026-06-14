@@ -34,6 +34,8 @@ Stop with a clear message if any of these fail.
    If there is no `## Workflow Config`, stop: "No `## Workflow Config` found. Run `/crew:adjust`."
 4. **Parse options:** an optional single-MR target (`--pr <N>`). Default is the full unlabeled ready queue.
 
+**Crew identity (§4.17, if configured).** Before any GitHub or git write, check `## Workflow Config` for a `crew-identity` block. **If present, act as the crew bot:** run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` — it mints/refreshes a cached 1-hour installation token, so re-run it before a write if the phase has run long (idempotent). Set `git config user.name`/`user.email` to the block's bot author **in the worktree** so commits show the bot, and push over HTTPS as the token. Confirm a write is bot-attributed before reporting done (§4.11). **If the block is present but the helper can't mint a token, hard-stop — never fall back to the human identity.** **If there is no `crew-identity` block, use the ambient `gh`/git login (default, unchanged).**
+
 ---
 
 ## Step 2 — Build the candidate queue
@@ -95,6 +97,7 @@ Then stop. Note: run **`/crew:merge`** to land the ones you approved.
 - Judge **origin-agnostically from the actual diff** — what the MR changes, not where its ticket came from.
 - Post an **audit comment** on every auto-approval and **verify the label + comment landed** (§4.11).
 - Read `merge-approval-label` (+ optional `auto-approve-*` overrides) from `## Workflow Config`; never hardcode.
+- **Act under the crew identity when configured (§4.17)** — if `## Workflow Config` has a `crew-identity` block, mint `GH_TOKEN` via its token-helper, set the bot git author, and verify writes are bot-attributed; **hard-stop if the helper fails — never fall back to the human.** No block → ambient login, unchanged.
 - Keep the **sandbox on** (§4.10); run headless — report, never ask.
 
 **DON'T:**
@@ -121,3 +124,4 @@ If you catch yourself thinking any of these, stop:
 - _"The reviewer left a MAJOR but it's advisory."_ — STOP. An open MAJOR/CRITICAL = DEFER.
 - _"I'll add the label without a comment to move faster."_ — STOP. Every auto-approval needs an audit comment + verify-landed (§4.11).
 - _"The user usually approves these, I'll run this automatically each loop."_ — STOP. `/crew:approve` is human-invoked only; it is never part of `/crew:run` (§4.16).
+- _"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."_ — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop** (§4.17), not a fallback to the human. Only an *absent* block runs as the user.

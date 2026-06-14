@@ -1,7 +1,7 @@
 {
   "name": "crew",
-  "description": "Autonomous, GitHub-issue-driven dev workflow for Claude Code. A looping orchestrator (/crew:run) pulls agent-ready issues and drives each through bundled implementation, qa, reviewer, mr-review, and findings subagents — one MR per ticket, GitHub as the source of truth. Ships /crew:ticket (issue writer + condense mode that batches review-followup tickets), /crew:merge (team-lead merge queue: merges approved-labeled MRs and resolves conflicts on all open MRs regardless of label, no one-blocker cap), /crew:approve (auto-approves the low-risk MRs so /crew:merge can land them), /crew:improve (codebase audit → backlog tickets), and /crew:adjust (project onboarding). The run loop selects tickets by priority then age.",
-  "version": "2.8.0",
+  "description": "Autonomous, GitHub-issue-driven dev workflow for Claude Code. A looping orchestrator (/crew:run) pulls agent-ready issues and drives each through bundled implementation, qa, reviewer, mr-review, and findings subagents — one MR per ticket, GitHub as the source of truth. Ships /crew:ticket (issue writer + condense mode that batches review-followup tickets), /crew:merge (team-lead merge queue: merges approved-labeled MRs and resolves conflicts on all open MRs regardless of label, no one-blocker cap), /crew:approve (auto-approves the low-risk MRs so /crew:merge can land them), /crew:improve (codebase audit → backlog tickets), and /crew:adjust (project onboarding). Optionally runs under a dedicated GitHub App bot identity (opt-in crew-identity) so its comments/commits show as a bot. The run loop selects tickets by priority then age.",
+  "version": "2.9.0",
   "author": {
     "name": "devshop-software"
   },

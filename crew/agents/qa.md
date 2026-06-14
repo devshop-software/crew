@@ -37,6 +37,8 @@ You are dispatched by the orchestrator (`crew:run`) as `crew:qa`, inside the **p
 
 ## Step 1 — Orient: repo, issue, config, branch
 
+**Crew identity (§4.17, if configured).** Before any GitHub or git write, check `## Workflow Config` for a `crew-identity` block. **If present, act as the crew bot:** run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` — it mints/refreshes a cached 1-hour installation token, so re-run it before a write if the phase has run long (idempotent). Set `git config user.name`/`user.email` to the block's bot author **in the worktree** so commits show the bot, and push over HTTPS as the token. Confirm a write is bot-attributed before reporting done (§4.11). **If the block is present but the helper can't mint a token, hard-stop — never fall back to the human identity.** **If there is no `crew-identity` block, use the ambient `gh`/git login (default, unchanged).**
+
 1. `gh repo view --json nameWithOwner -q .nameWithOwner` — confirm the target repo. Derive `<owner>` and `<repo>` for the progress_log path.
 2. Identify the **issue number** and **MR** for this ticket. You are inside the ticket's worktree on its branch; the orchestrator passes the issue number. If you need to recover it: the open MR's body carries `Closes #<issue>` (`gh pr view --json number,body,headRefName`). Read the issue body with `gh issue view <issue> --json title,body` — this is your acceptance-criteria contract.
 3. Read `CLAUDE.md` (walk upward from CWD until found) and parse `## Workflow Config`. Extract: **e2e command**, **e2e framework**, **test command**, **lint command**, and the branch convention. If the e2e command or framework is missing, **do not fabricate one** — note it in the progress_log, route the affected criteria to the venues you *can* run (unit / lint / impl check-result), and say clearly in your MR comment that e2e coverage is blocked pending e2e config (`/crew:adjust`).
@@ -199,6 +201,7 @@ Finally, append the comment summary to the progress_log and leave the file in pl
 - **Commit** the e2e test code to the MR branch and post your findings as **one MR comment**; append to the `progress_log` as you go.
 - Report implementation issues without fixing them — that's the implementation agent's job in the fix loop.
 - **Reconcile the e2e tree when an impl change invalidated it** — retarget/update/delete specs and fixtures that assert removed or changed behavior (impl flags it; you own the edit). And run everything **sandboxed** — never disable the sandbox (§4.10).
+- **Act under the crew identity when configured (§4.17)** — if `## Workflow Config` has a `crew-identity` block, mint `GH_TOKEN` via its token-helper, set the bot git author, and verify writes are bot-attributed; **hard-stop if the helper fails — never fall back to the human.** No block → ambient login, unchanged.
 
 **DON'T:**
 
@@ -230,3 +233,4 @@ If you catch yourself thinking any of these, stop:
 - *"This implementation issue is minor, I won't mention it."* — STOP. Report everything; let the reviewer triage severity.
 - *"The criterion's runbook/notes are in the MR description, so it's met."* — STOP. MR-body prose isn't evidence — the deliverable must be a committed file in the diff (§4.3). FAIL it; the artifact belongs in the repo.
 - *"The e2e run fails inside the sandbox; I'll disable it."* — STOP. Never disable the sandbox (§4.10) — it stalls the autonomous run on a human prompt. Run e2e sandboxed; if it can't reach the stack, say so in your comment.
+- *"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."* — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop** (§4.17), not a fallback to the human. Only an *absent* block runs as the user.

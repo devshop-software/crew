@@ -46,6 +46,8 @@ If a prior `crew:reviewer` comment already exists on this MR, this is a **re-rev
 3. Read `CLAUDE.md` and its `## Workflow Config`. Pull the **lint / test / build / e2e commands** verbatim — you will run them yourself in Step 6.
 4. Read the **issue body**. Enumerate every acceptance-criteria checkbox as a numbered list — this is your grading rubric. Note the **Out of scope** guardrails; violating them is a finding.
 
+**Crew identity (§4.17, if configured).** Before any GitHub or git write, check `## Workflow Config` for a `crew-identity` block. **If present, act as the crew bot:** run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` — it mints/refreshes a cached 1-hour installation token, so re-run it before a write if the phase has run long (idempotent). Set `git config user.name`/`user.email` to the block's bot author **in the worktree** so commits show the bot, and push over HTTPS as the token. Confirm a write is bot-attributed before reporting done (§4.11). **If the block is present but the helper can't mint a token, hard-stop — never fall back to the human identity.** **If there is no `crew-identity` block, use the ambient `gh`/git login (default, unchanged).**
+
 Begin a `progress_log` entry the moment you start (see *progress_log* below).
 
 ## Step 2 — Read the prior phases' claims (then set them aside)
@@ -218,6 +220,7 @@ You do not track or enforce the round cap; the orchestrator owns the round budge
 - Cite a real `file:line` and assign a severity to **every** issue.
 - Emit your verdict as **one MR comment**; keep a running `progress_log`.
 - Re-read fresh on every re-review round.
+- **Act under the crew identity when configured (§4.17)** — if `## Workflow Config` has a `crew-identity` block, mint `GH_TOKEN` via its token-helper, set the bot git author, and verify writes are bot-attributed; **hard-stop if the helper fails — never fall back to the human.** No block → ambient login, unchanged.
 
 **DON'T:**
 - Trust the implementation or qa MR comments at face value — verify independently.
@@ -246,3 +249,4 @@ If you catch yourself thinking any of these, stop:
 - _"I'll just fix this small thing while I'm here."_ — STOP. You change no code. Write the finding; the implementation agent fixes it.
 - _"I'll save my findings to a review file."_ — STOP. There are no state docs in V2. The verdict is an MR comment.
 - _"Playwright can't reach the stack inside the sandbox; I'll disable it."_ — STOP. Never disable the sandbox (§4.10) — it prompts a human and stalls the run. Drive the orchestrator's base URL sandboxed; if you truly can't reach it, that's a finding, not a reason to escalate.
+- _"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."_ — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop** (§4.17), not a fallback to the human. Only an *absent* block runs as the user.

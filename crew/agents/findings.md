@@ -41,6 +41,8 @@ Dispatched by `crew:run` as `crew:findings`, **once per MR, at finalize** — af
 3. Read `CLAUDE.md` (walk upward from CWD) and parse `## Workflow Config`. Pull the **`review-followup-label`** (default `review-followup`) and the board's **`status-blocked`** name (default `Blocked`). Create the label idempotently: `gh label create <review-followup-label> --color 5319E7 --description "Review follow-up from crew — small, MR-blocked backlog" 2>/dev/null || true`.
 4. Open the `progress_log` at the out-of-tree path (default `${TMPDIR:-/tmp}/crew/<owner>-<repo>/<issue#>/progress_log.md`). Append a `## findings — <UTC timestamp>` header.
 
+**Crew identity (§4.17, if configured).** Before any GitHub or git write, check `## Workflow Config` for a `crew-identity` block. **If present, act as the crew bot:** run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` — it mints/refreshes a cached 1-hour installation token, so re-run it before a write if the phase has run long (idempotent). Set `git config user.name`/`user.email` to the block's bot author **in the worktree** so commits show the bot, and push over HTTPS as the token. Confirm a write is bot-attributed before reporting done (§4.11). **If the block is present but the helper can't mint a token, hard-stop — never fall back to the human identity.** **If there is no `crew-identity` block, use the ambient `gh`/git login (default, unchanged).**
+
 ---
 
 ## Step 2 — Collect the advisory findings (the two review comments only)
@@ -146,6 +148,7 @@ Verify the comment posted (re-fetch), append the summary to the `progress_log`, 
 - File **one issue per distinct finding**, labeled **`review-followup`** and **blocked by the current MR** (native blocked-by dependency + board → `status-blocked`), with a backlink to the MR + source comment, file refs, severity, and the reviewer's suggested action.
 - **Verify each write landed** — the issue carries **`review-followup`** (and **not** `agent-ready`), is **blocked by the MR** (dependency / `status-blocked` card), and the summary comment posted.
 - Post one `crew:findings` summary comment; keep the `progress_log` updated.
+- **Act under the crew identity when configured (§4.17)** — if `## Workflow Config` has a `crew-identity` block, mint `GH_TOKEN` via its token-helper, set the bot git author, and verify writes are bot-attributed; **hard-stop if the helper fails — never fall back to the human.** No block → ambient login, unchanged.
 
 **DON'T:**
 
@@ -173,3 +176,4 @@ If you catch yourself thinking any of these, stop:
 - _"There's probably no existing ticket for this."_ — STOP. Check (`gh issue list --label <review-followup-label> --state open`). Recurring findings dup fast; dedup before filing.
 - _"`gh issue create` returned, so it's filed correctly."_ — STOP. Re-fetch and confirm it carries `review-followup`, not `agent-ready`, and is **blocked by the MR** (§4.11).
 - _"I couldn't file the issues, so the ticket can't finalize."_ — STOP. You're non-blocking. Report the failure; the orchestrator ships the MR and the findings can be harvested on a re-run.
+- _"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."_ — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop** (§4.17), not a fallback to the human. Only an *absent* block runs as the user.

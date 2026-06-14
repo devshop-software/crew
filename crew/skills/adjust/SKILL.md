@@ -1,6 +1,6 @@
 ---
 name: adjust
-description: "Onboards a project for the crew loop — scans the structure, detects and validates the test / lint / build / e2e and app-start commands, detects the GitHub remote and optional Projects board, offers a one-time gated bare-clone worktree migration, advises on setup gaps, and writes a Workflow Config block into CLAUDE.md (commands, ticket-source label, board columns incl. a needs-human/blocked and a done column, the priority field, the review-followup + merge-approval labels and merge method, branch convention, worktree layout, and the stack-run config: start command / readiness check / per-ticket isolation) that every other component reads at runtime. Use when the user invokes /crew:adjust."
+description: "Onboards a project for the crew loop — scans the structure, detects and validates the test / lint / build / e2e and app-start commands, detects the GitHub remote and optional Projects board, offers a one-time gated bare-clone worktree migration, advises on setup gaps, and writes a Workflow Config block into CLAUDE.md (commands, ticket-source label, board columns incl. a needs-human/blocked and a done column, the priority field, the review-followup + merge-approval labels and merge method, branch convention, worktree layout, and the stack-run config: start command / readiness check / per-ticket isolation, and an optional GitHub App crew-identity — installing + testing its token helper) that every other component reads at runtime. Use when the user invokes /crew:adjust."
 ---
 
 # Adjust
@@ -269,6 +269,21 @@ Report: **"Stack: validated / failed to validate / none."** If it fails to come 
 
 ---
 
+## Step 6I — Crew identity (optional GitHub App, §4.17)
+
+By default the loop authenticates as the **ambient user** (your `gh` login + git config), so crew's comments/commits show under your account. A project can opt into a dedicated **GitHub App bot** instead — comments/commits show as `<slug>[bot]`, and a human can natively Approve its PRs. **Opt-in:** skip this and the loop runs as you, unchanged.
+
+Offer it: **"Run crew under a dedicated GitHub App identity (bot comments/commits)? Needs an org-owned App + its private key already created — say no to keep running as your account."** Configure only on an explicit yes **and** only once the App + key exist (creating the App is a manual GitHub step — see the design note / wiki).
+
+On yes, gather and **test before recording**:
+1. **Resolve the values.** `app-id` (App settings page); `installation-id` (`gh api /orgs/<owner>/installations --jq '.installations[]|select(.app_slug=="<slug>")|.id'`); the bot git author — name `<slug>[bot]`, email `<bot-user-id>+<slug>[bot]@users.noreply.github.com` (`gh api '/users/<slug>[bot]' --jq .id`).
+2. **Place the key + helper per machine, outside any repo.** Private key at `~/.config/crew/crew.pem` (`chmod 600`); install the bundled helper `${CLAUDE_PLUGIN_ROOT}/scripts/gh-token.sh` → `~/.config/crew/gh-token.sh` (`chmod +x`). **Never** inside a repo or a worktree-copied `.env`.
+3. **Test it (mandatory).** Run the helper (`CREW_APP_ID=<id> CREW_INSTALLATION_ID=<id> CREW_APP_PRIVATE_KEY_PATH=<path> ~/.config/crew/gh-token.sh`) — it must mint a token; then confirm the token reaches the repo (`curl -fsS -H "Authorization: token <token>" https://api.github.com/installation/repositories` lists it). **If the mint or the reach fails, do NOT record the block** — report the cause (key path / token scopes / which repos the App is installed on) and leave the loop on the user identity. A `crew-identity` the helper can't use makes every component hard-stop (§4.17).
+
+On a green test, record the `crew-identity` rows (Step 7). On decline, record `identity-mode: user` (or omit the block) — the loop runs as the user.
+
+---
+
 ## Step 7 — Present the config for confirmation
 
 Assemble the full block and show it before writing. Ask **"Does this look right? I can change any value."** and wait.
@@ -303,6 +318,13 @@ Assemble the full block and show it before writing. Ask **"Does this look right?
 | readiness-check | `http://localhost:<port>/health`  *(or a port / log pattern)* |
 | port | `3000` |
 | isolation-scheme | `PORT = 3000 + (issue# mod 50); COMPOSE_PROJECT_NAME = <repo>-<issue#>`  *(or `none`)* |
+| identity-mode | `github-app`  *(or `user` / omit — §4.17)* |
+| app-id | `<app id>`  *(github-app only)* |
+| installation-id | `<installation id>`  *(github-app only)* |
+| private-key-path | `~/.config/crew/crew.pem`  *(per machine, outside any repo)* |
+| token-helper | `~/.config/crew/gh-token.sh` |
+| git-author-name | `<slug>[bot]` |
+| git-author-email | `<bot-user-id>+<slug>[bot]@users.noreply.github.com` |
 ```
 
 Substitute real detected values. Where a command or board is genuinely absent, write `none` — an honest `none` is better than a command that fails at 3am mid-run.
@@ -335,6 +357,7 @@ After writing, surface (don't auto-fix) the gaps that will bite the loop:
 - **No `isolation-scheme`** — note that with `isolation-scheme: none`, a per-ticket stack can collide with the developer's local stack (and would block future parallelism). Suggest exposing a port env var and a data namespace knob (`COMPOSE_PROJECT_NAME`, a test schema); don't add them silently.
 - **Standard worktree layout** — fine; note `/crew:run` will add per-ticket worktrees off the existing checkout. Mention the bare-clone migration (Step 6W) keeps the repo root clean and is available later via `/crew:adjust worktree-layout`.
 - **No lint command** — note that the implementation/reviewer agents will skip lint checks.
+- **Running as you, not a bot** — with no `crew-identity` configured, crew's comments/commits show under your account. `/crew:adjust` can wire a GitHub App identity (§4.17) so they show as `<slug>[bot]` (and let a human Approve its PRs); needs an org-owned App + key. Offer it; don't set it up uninvited.
 - **`progress_log` path not ignored** — it lives outside the repo by default, so usually a non-issue; if the configured location ever lands inside the tree, recommend a `.gitignore` entry so it's never committed.
 - **Hooks** — if scope-limiting hooks would help, explain and let the user decide. Never install without consent.
 
@@ -374,6 +397,7 @@ When invoked with `update` or a specific key:
 - Capture the full ticket-source + merge contract: `agent-ready-label`, `agent-review-label` (the `/crew:improve` backlog), `review-followup-label` (where `crew:findings` files small follow-ups and `/crew:ticket condense` reads them — default `review-followup`), `merge-approval-label` (the `/crew:merge` go-ahead — default `approved`), the board statuses (TODO / In progress / In review / **`status-done`** / a **needs-human/blocked** column), the **`priority-field`** (priority-ordered selection, §4.5), `branch-convention`, and `merge-method` — the loop, `/crew:merge`, and `/crew:ticket condense` read exactly these keys.
 - Capture the **stack-run config** (`start-cmd`, `readiness-check`, `port`, `isolation-scheme`) and **validate** it by bringing the stack up under an issue-derived isolation and tearing it down — qa and reviewer depend on a running, isolated stack.
 - Offer the **bare-clone worktree migration** only with explicit consent; record `worktree-layout` either way. Preserve the old repo on migration; never auto-delete it.
+- Offer the optional **crew identity** (§4.17): on consent, install the bundled token-helper + key per machine and **test it (mint a token, confirm repo reach) before recording** the `crew-identity` block; never write a block the helper can't use. No consent → omit it; the loop runs as the user.
 - Present the config for confirmation before writing it.
 - Record `none` for anything genuinely absent, and advise the user about the gap.
 
@@ -402,3 +426,4 @@ If you catch yourself thinking any of these, stop:
 - _"I'll migrate to a bare clone since it's cleaner."_ — STOP. The migration rewrites the repo layout — offer it, get an explicit yes, and never delete the old repo. `standard` is a fully supported layout.
 - _"I'll scaffold a `_workflow/` folder like V1 did."_ — STOP. V2 keeps no on-disk state. GitHub (issue, MR, comments, board) is the source of truth.
 - _"I'll just write the config and let the user fix it later."_ — STOP. Present it for confirmation first; a config the user never saw is the one nobody trusts.
+- _"They gave me the App values, I'll write the `crew-identity` block."_ — STOP. **Test it first** — mint a token and confirm it reaches the repo. A block the helper can't use makes every component hard-stop (§4.17); write it only after a green test.

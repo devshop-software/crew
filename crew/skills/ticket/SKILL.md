@@ -51,6 +51,8 @@ Read `CLAUDE.md` from the CWD (walking upward until found). Extract:
 
 Never hardcode tool names, package managers, or framework names. Pull them from `CLAUDE.md` fresh each run. If `CLAUDE.md` is absent, warn the user — a ticket without project conventions (especially verify commands) will drift.
 
+**Crew identity (§4.17, if configured).** Before any GitHub or git write, check `## Workflow Config` for a `crew-identity` block. **If present, act as the crew bot:** run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` — it mints/refreshes a cached 1-hour installation token, so re-run it before a write if the phase has run long (idempotent). Set `git config user.name`/`user.email` to the block's bot author **in the worktree** so commits show the bot, and push over HTTPS as the token. Confirm a write is bot-attributed before reporting done (§4.11). **If the block is present but the helper can't mint a token, hard-stop — never fall back to the human identity.** **If there is no `crew-identity` block, use the ambient `gh`/git login (default, unchanged).**
+
 ---
 
 ## Step 2 — Ground in the codebase (light)
@@ -150,6 +152,7 @@ Then ask: _"Want to tweak anything before the loop picks this up?"_ If the user 
 - Verify every concrete file reference by actually looking at it before writing it into the ticket.
 - Keep the body mechanical — three sections only: Context / Out of scope / Acceptance criteria. A few sentences of human context at most.
 - Fold verification into the acceptance criteria as testable outcomes — there is no separate How-to-verify section.
+- **Act under the crew identity when configured (§4.17)** — if `## Workflow Config` has a `crew-identity` block, mint `GH_TOKEN` via its token-helper, set the bot git author, and verify writes are bot-attributed; **hard-stop if the helper fails — never fall back to the human.** No block → ambient login, unchanged.
 
 **DON'T:**
 
@@ -174,6 +177,7 @@ If you catch yourself thinking any of these, stop:
 - _"The user stated an outcome and I'm writing a mechanism"_ — STOP. `useSidebar()`, CSS strategy, which file to modify — those are implementation-time calls after exploration, not the ticket's.
 - _"The criterion says 'document the runbook' — the agent can just put it in the PR."_ — STOP. Deliverables are committed files. Phrase it to land in the repo (e.g. `docs/…`), not the MR body — body prose isn't versioned and fails review.
 - _"The mockup link 404s — the source-of-truth attachment is gone, I'll stop."_ — STOP. On a **private** repo, GitHub returns a **decoy 404** to anonymous attachment requests. Re-fetch with the gh token (`curl -sL -H "Authorization: token $(gh auth token)" <url>`, §4.14) before concluding it's a dead link — an anonymous 404 means unauthenticated, not missing.
+- _"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."_ — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop** (§4.17), not a fallback to the human. Only an *absent* block runs as the user.
 
 ---
 

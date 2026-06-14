@@ -41,6 +41,8 @@ Before touching any MR, establish the environment. Stop with a clear message if 
 
 > If no board is configured, the skill runs **label-only**: it still gates on the `approved` label and merges, but makes no card moves. Everywhere below that says "move the card", silently skip it when board-less.
 
+**Crew identity (§4.17, if configured).** Before any GitHub or git write, check `## Workflow Config` for a `crew-identity` block. **If present, act as the crew bot:** run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` — it mints/refreshes a cached 1-hour installation token, so re-run it before a write if the phase has run long (idempotent). Set `git config user.name`/`user.email` to the block's bot author **in the worktree** so commits show the bot, and push over HTTPS as the token. Confirm a write is bot-attributed before reporting done (§4.11). **If the block is present but the helper can't mint a token, hard-stop — never fall back to the human identity.** **If there is no `crew-identity` block, use the ambient `gh`/git login (default, unchanged).**
+
 ---
 
 ## Step 2 — Build the two queues (oldest first)
@@ -141,6 +143,7 @@ You only ever dispatch **`crew:implementation`** (conflict / CI fix) and, for a 
 - **Claim a blocked MR (§4.13)** before mutating it, and skip any MR a live peer owns.
 - Keep the **sandbox on** and use **non-forced** worktree cleanup (§4.10); **verify every GitHub write landed** (§4.11).
 - Run **board-aware**, falling back to label-only-merge (no card moves) when `board: none`.
+- **Act under the crew identity when configured (§4.17)** — if `## Workflow Config` has a `crew-identity` block, mint `GH_TOKEN` via its token-helper, set the bot git author, and verify writes are bot-attributed; **hard-stop if the helper fails — never fall back to the human.** No block → ambient login, unchanged.
 
 **DON'T:**
 
@@ -169,3 +172,4 @@ If you catch yourself thinking any of these, stop:
 - _"I authored these PRs, I'll just approve them via the API."_ — STOP. GitHub blocks author self-approval — that's the whole reason the label exists. Gate on the label.
 - _"This unlabeled MR is conflict-free now, I'll merge it while I'm here."_ — STOP. Resolving its conflicts is your job; **merging** needs the human's label. Leave it conflict-free for green-light.
 - _"This unlabeled MR I just resolved has red CI, I'll fix that too."_ — STOP. On an unlabeled MR you only resolve conflicts. Red CI and re-review are `/crew:run`'s job — don't chase them here.
+- _"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."_ — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop** (§4.17), not a fallback to the human. Only an *absent* block runs as the user.

@@ -46,6 +46,8 @@ V2 has **no numbered state docs and no `_workflow/` folder.** Do not create `01-
 
 > Never `git add` the `progress_log`. If you ever see it appear in `git status`, you created it in the wrong place — move it out of the tree.
 
+**Crew identity (§4.17, if configured).** Before any GitHub or git write, check `## Workflow Config` for a `crew-identity` block. **If present, act as the crew bot:** run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` — it mints/refreshes a cached 1-hour installation token, so re-run it before a write if the phase has run long (idempotent). Set `git config user.name`/`user.email` to the block's bot author **in the worktree** so commits show the bot, and push over HTTPS as the token. Confirm a write is bot-attributed before reporting done (§4.11). **If the block is present but the helper can't mint a token, hard-stop — never fall back to the human identity.** **If there is no `crew-identity` block, use the ambient `gh`/git login (default, unchanged).**
+
 ---
 
 ## Step 1 — Detect mode
@@ -252,6 +254,7 @@ Return the MR number and status to the orchestrator. `crew:run` re-runs `crew:qa
 - Write unit/integration tests for new logic; run `lint`/`test`/`build` and get them all green.
 - On the first dispatch, create the branch and open the **draft** MR with `Closes #<issue>`, then push.
 - In fix mode, commit to the **same branch** and scope changes to the reviewer's findings only.
+- **Act under the crew identity when configured (§4.17)** — if `## Workflow Config` has a `crew-identity` block, mint `GH_TOKEN` via its token-helper, set the bot git author, and verify writes are bot-attributed; **hard-stop if the helper fails — never fall back to the human.** No block → ambient login, unchanged.
 - Make your **output an MR comment**, and flush the `progress_log` into it at handoff.
 
 **DON'T:**
@@ -285,6 +288,7 @@ If you catch yourself thinking any of these, stop:
 - _"I'll document this runbook / note in the PR description."_ — STOP. The MR body is a write-once summary, not a deliverable. If an acceptance criterion asks for documentation, it's a **committed file** in the diff (§4.3) — the body isn't version-controlled and `mr-review` never sees it.
 - _"I edited the MR body and the command returned, so it's done."_ — STOP. `gh pr edit` can abort silently on this repo. Use `gh api -X PATCH` and **re-fetch the live body to confirm** the edit is actually there before reporting DONE (§4.11).
 - _"This command fails in the sandbox; I'll re-run it with the sandbox disabled."_ — STOP. Never disable the sandbox (§4.10) — it prompts a human and stalls the unattended run. Find a sandboxed workaround.
+- _"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."_ — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop** (§4.17), not a fallback to the human. Only an *absent* block runs as the user.
 - _"In fix mode I'll also tidy up this nearby thing."_ — STOP. Fix mode touches only what the reviewer flagged, on the same branch.
 - _"I've gone back and forth on this fix a few times, one more try."_ — COUNT. If that's attempt 3, stop and escalate via the comment as BLOCKED.
 - _"I'll open a fresh MR for the fix."_ — STOP. One MR per ticket. Commit to the existing branch.
