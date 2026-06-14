@@ -165,6 +165,7 @@ Each ticket gets one branch (one MR per ticket). Capture how branches are named.
 - `branch-convention` — default **`crew/<issue#>-<slug>`** (e.g. `crew/142-add-rate-limit`). The `<issue#>` ties the branch to its issue and MR; the `<slug>` is a short kebab-case summary. If the project has an existing convention (check recent branches: `git branch -r --sort=-committerdate | head`), match it and substitute the placeholders.
 - `base-branch` — detect from git: `git symbolic-ref refs/remotes/origin/HEAD` → strip to `main` / `master`. This is what worktrees branch from and what MRs target.
 - `merge-method` — how `/crew:merge` lands an approved MR: **`squash`** (default) / `merge` / `rebase`. Match what the repo allows (`gh api repos/<owner>/<repo> --jq '{squash:.allow_squash_merge,merge:.allow_merge_commit,rebase:.allow_rebase_merge}'`); don't pick a method branch protection forbids.
+- `auto-merge` — opt-in low-risk auto-merge for `/crew:merge`: **`off`** (default — every merge needs a human green-light) or **`low-risk`** (`/crew:merge` also auto-merges the provably-low-risk slice of fully-reviewed unlabeled MRs — docs/tests/i18n/dead-code — by the `/crew:approve` bar, §4.16). Leave `off` unless the user asks for it; it stays human-invoked (never `/crew:run`).
 
 > The per-ticket **worktree** (one tree per issue, added and removed mid-loop) is created and owned by `/crew:run`, not configured here — adjust only records the *naming* (`branch-convention` / `base-branch`). What adjust *does* own is the one-time **infrastructure** that makes those per-ticket trees clean — the bare-clone layout, set up in Step 6W below (§4.1).
 
@@ -318,6 +319,7 @@ Assemble the full block and show it before writing. Ask **"Does this look right?
 | branch-convention | `crew/<issue#>-<slug>` |
 | base-branch | `main` |
 | merge-method | `squash`  *(or `merge` / `rebase`)* |
+| auto-merge | `off`  *(or `low-risk` — opt-in: /crew:merge auto-merges the low-risk slice, §4.16)* |
 | worktree-layout | `bare-clone`  *(or `standard`)* |
 | start-cmd | `docker compose up`  *(or `none`)* |
 | readiness-check | `http://localhost:<port>/health`  *(or a port / log pattern)* |
@@ -399,7 +401,7 @@ When invoked with `update` or a specific key:
 
 - Confirm GitHub auth and a default repo (Step 0) before writing anything — the loop is GitHub-driven.
 - Detect commands from actual project files, then **run them** to validate.
-- Capture the full ticket-source + merge contract: `agent-ready-label`, `agent-review-label` (the `/crew:improve` backlog), `review-followup-label` (where `crew:findings` files small follow-ups and `/crew:ticket condense` reads them — default `review-followup`), `merge-approval-label` (the `/crew:merge` go-ahead — default `approved`), the board statuses (TODO / In progress / In review / **`status-done`** / a **needs-human/blocked** column), the **`priority-field`** (priority-ordered selection, §4.5), `branch-convention`, and `merge-method` — the loop, `/crew:merge`, and `/crew:ticket condense` read exactly these keys.
+- Capture the full ticket-source + merge contract: `agent-ready-label`, `agent-review-label` (the `/crew:improve` backlog), `review-followup-label` (where `crew:findings` files small follow-ups and `/crew:ticket condense` reads them — default `review-followup`), `merge-approval-label` (the `/crew:merge` go-ahead — default `approved`), the board statuses (TODO / In progress / In review / **`status-done`** / a **needs-human/blocked** column), the **`priority-field`** (priority-ordered selection, §4.5), `branch-convention`, `merge-method`, and `auto-merge` (opt-in low-risk auto-merge, default `off`, §4.16) — the loop, `/crew:merge`, and `/crew:ticket condense` read exactly these keys.
 - Capture the **stack-run config** (`start-cmd`, `readiness-check`, `port`, `isolation-scheme`) and **validate** it by bringing the stack up under an issue-derived isolation and tearing it down — qa and reviewer depend on a running, isolated stack.
 - Offer the **bare-clone worktree migration** only with explicit consent; record `worktree-layout` either way. Preserve the old repo on migration; never auto-delete it.
 - Offer the optional **crew identity** (§4.17): on consent, install the bundled token-helper + key per machine and **test it (mint a token, confirm repo reach) before recording** the `crew-identity` block; never write a block the helper can't use. No consent → omit it; the loop runs as the user.
