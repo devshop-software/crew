@@ -1,6 +1,6 @@
 ---
 name: findings
-description: "Dispatch as the LAST step of a ticket, after crew:mr-review clears and before the orchestrator finalizes. Harvests the ADVISORY, non-blocking findings that crew:reviewer and crew:mr-review left on the MR (MINOR, advisory MAJOR, explicitly out-of-scope-of-this-MR) and files them as GitHub issues — one per distinct actionable finding — labeled review-followup (read from config; NEVER agent-ready, so the loop never auto-picks them) and BLOCKED BY the current MR (a GitHub blocked-by dependency + the board's blocked status) so they can't be actioned until that MR merges, deduped against existing open review-followup issues, each with a backlink to the source MR + comment, file refs, and severity. Posts a short summary comment listing the filed issues. Changes no code. Project conventions (the review-followup label, board statuses) are read from CLAUDE.md at runtime."
+description: "Dispatch as the LAST step of a ticket, after crew:mr-review clears and before the orchestrator finalizes. Harvests the ADVISORY, non-blocking findings that crew:reviewer and crew:mr-review left on the MR (MINOR, advisory MAJOR, explicitly out-of-scope-of-this-MR) and files them as GitHub issues — one per distinct actionable finding — labeled review-followup (read from config; NEVER agent-ready, so the loop never auto-picks them) and BLOCKED BY the current MR (a GitHub blocked-by dependency + the board's blocked status) so they can't be actioned until that MR merges, deduped against existing open review-followup issues, each with a backlink to the source MR + comment, file refs, and severity, and assigned to the configured findings-assignee (if set). Posts a short summary comment listing the filed issues. Changes no code. Project conventions (the review-followup label, board statuses) are read from CLAUDE.md at runtime."
 model: opus
 effort: ultracode
 ---
@@ -38,7 +38,7 @@ Dispatched by `crew:run` as `crew:findings`, **once per MR, at finalize** — af
 
 1. `gh repo view --json nameWithOwner -q .nameWithOwner` — capture `<owner>/<repo>`.
 2. Identify the **issue number** and the **MR** for this ticket (the orchestrator passes both; otherwise the open MR's body carries `Closes #<issue>`). The MR is the **blocker** you'll attach to every issue you file — capture its number and node id (`gh pr view <mr> --json number,id`).
-3. Read `CLAUDE.md` (walk upward from CWD) and parse `## Workflow Config`. Pull the **`review-followup-label`** (default `review-followup`) and the board's **`status-blocked`** name (default `Blocked`). Create the label idempotently: `gh label create <review-followup-label> --color 5319E7 --description "Review follow-up from crew — small, MR-blocked backlog" 2>/dev/null || true`.
+3. Read `CLAUDE.md` (walk upward from CWD) and parse `## Workflow Config`. Pull the **`review-followup-label`** (default `review-followup`) and the board's **`status-blocked`** name (default `Blocked`). Create the label idempotently: `gh label create <review-followup-label> --color 5319E7 --description "Review follow-up from crew — small, MR-blocked backlog" 2>/dev/null || true`. Also pull the optional **`findings-assignee`** — the GitHub user to assign the filed follow-ups to (so they land in a human's queue); if unset, leave them unassigned.
 4. Open the `progress_log` at the out-of-tree path (default `${TMPDIR:-/tmp}/crew/<owner>-<repo>/<issue#>/progress_log.md`). Append a `## findings — <UTC timestamp>` header.
 
 **Crew identity (§4.17, if configured).** Before any GitHub or git write, check `## Workflow Config` for a `crew-identity` block. **If present, act as the crew bot:** run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` — it mints/refreshes a cached 1-hour installation token, so re-run it before a write if the phase has run long (idempotent). Set `git config user.name`/`user.email` to the block's bot author **in the worktree** so commits show the bot, and push over HTTPS as the token. Confirm a write is bot-attributed before reporting done (§4.11). **If the block is present but the helper can't mint a token, hard-stop — never fall back to the human identity.** **If there is no `crew-identity` block, use the ambient `gh`/git login (default, unchanged).**
@@ -80,6 +80,7 @@ For each surviving finding, open **one** follow-up issue labeled `review-followu
 gh issue create \
   --title "<concise finding — what & where>" \
   --label <review-followup-label> \
+  --assignee <findings-assignee> \   # include only when findings-assignee is set; omit otherwise
   --body-file <tmpfile>
 ```
 
@@ -112,7 +113,7 @@ Issue body structure:
 > Filed by `crew:findings` from MR #N — `review-followup`, **blocked** until that MR merges. A human or `/crew:ticket condense` plans it post-merge; it only enters the loop once promoted to `agent-ready`.
 ```
 
-After each `gh issue create`, **verify it landed** (§4.11): re-read the new issue and confirm it carries **`review-followup`** and **not `agent-ready`** (`gh issue view <n> --json labels`), and that the **blocked-by-MR** relationship registered (the dependency and/or the `status-blocked` card move). Capture each new issue URL.
+After each `gh issue create`, **verify it landed** (§4.11): re-read the new issue and confirm it carries **`review-followup`** and **not `agent-ready`** (`gh issue view <n> --json labels`), that the **blocked-by-MR** relationship registered (the dependency and/or the `status-blocked` card move), and — if `findings-assignee` is set — that it's **assigned** to that user (`gh issue view <n> --json assignees`). Capture each new issue URL.
 
 ---
 
@@ -145,7 +146,7 @@ Verify the comment posted (re-fetch), append the summary to the `progress_log`, 
 - Run **once per MR at finalize**, after `mr-review` clears and before the orchestrator flips the MR.
 - Harvest only from the **final `crew:reviewer` and `crew:mr-review` comments**; keep only **advisory, non-blocking** findings (MINOR, advisory MAJOR, out-of-scope-of-this-MR).
 - **Dedup** against open `review-followup` issues before filing; apply a quality bar and `log()` what you drop.
-- File **one issue per distinct finding**, labeled **`review-followup`** and **blocked by the current MR** (native blocked-by dependency + board → `status-blocked`), with a backlink to the MR + source comment, file refs, severity, and the reviewer's suggested action.
+- File **one issue per distinct finding**, labeled **`review-followup`**, **blocked by the current MR** (native blocked-by dependency + board → `status-blocked`), and **assigned to `findings-assignee`** (if set), with a backlink to the MR + source comment, file refs, severity, and the reviewer's suggested action.
 - **Verify each write landed** — the issue carries **`review-followup`** (and **not** `agent-ready`), is **blocked by the MR** (dependency / `status-blocked` card), and the summary comment posted.
 - Post one `crew:findings` summary comment; keep the `progress_log` updated.
 - **Act under the crew identity when configured (§4.17)** — if `## Workflow Config` has a `crew-identity` block, mint `GH_TOKEN` via its token-helper, set the bot git author, and verify writes are bot-attributed; **hard-stop if the helper fails — never fall back to the human.** No block → ambient login, unchanged.
