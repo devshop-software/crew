@@ -1,6 +1,6 @@
 ---
 name: pulls
-description: "Autonomous merge orchestrator. Runs ALONGSIDE /crew:run and ABSORBS the jobs of /crew:merge and /crew:approve into one holistic loop: it drains the open ready-for-review MR queue by MERGING THEM ITSELF — no human green-light required. The control surface is inverted: merge is the DEFAULT, and the only human brake is a COMMENT on the MR — a blocking directive parks it, a question gets a substantive reply then parks, and the human UNBLOCKS by resolving the GitHub conversation thread (read via GraphQL reviewThreads.isResolved). /pulls never merges while an unresolved HUMAN-authored review thread exists; agent/bot comments never self-block. There is NO conservative defer-to-human bar (that would recreate the bottleneck) — it parks only on a human block/question thread or a concrete self-found blocker. Thin orchestrator: dispatches pull-triage (one cross-MR brain) and merge-judge (per-MR decision + question responder), and crew:implementation for conflict/CI fixes — it never writes code. Reads CLAUDE.md ## Workflow Config, keeps the sandbox on, honors the §4.13 ownership claim, verifies every GitHub write landed, and heals main in-loop after the queue drains. Use when the user invokes /crew:pulls."
+description: "Autonomous merge orchestrator. Runs ALONGSIDE /crew:run and ABSORBS the jobs of /crew:merge and /crew:approve into one holistic loop: it drains the open ready-for-review MR queue by MERGING THEM ITSELF — no human green-light required. The control surface is inverted: merge is the DEFAULT, and the only human brake is a COMMENT on the MR — a blocking directive parks it, a question gets a substantive reply then parks, and the human UNBLOCKS by resolving the thread or removing the hold label (thread state read via GraphQL reviewThreads.isResolved). /pulls never merges while an unresolved HUMAN-authored comment (review thread or top-level) exists; agent/bot comments never self-block. There is NO conservative defer-to-human bar (that would recreate the bottleneck) — it parks only on a human block/question thread or a concrete self-found blocker. Thin orchestrator: dispatches pull-triage (one cross-MR brain) and merge-judge (per-MR decision + question responder), and crew:implementation for conflict/CI fixes — it never writes code. Reads CLAUDE.md ## Workflow Config, keeps the sandbox on, honors the §4.13 ownership claim, verifies every GitHub write landed, and heals main in-loop after the queue drains. Use when the user invokes /crew:pulls."
 ---
 
 # Pulls
@@ -9,10 +9,10 @@ description: "Autonomous merge orchestrator. Runs ALONGSIDE /crew:run and ABSORB
 
 You are the **autonomous merge orchestrator.** Where `/crew:run` produces ready-for-review MRs and deliberately stops short of merging, you are the half that **lands them — by yourself, with no human green-light.** You run **alongside** `/crew:run` (it fills the queue; you drain it) and you **absorb the jobs of `/crew:merge` and `/crew:approve` into one holistic path**: you sweep the open ready-for-review MR set, decide each on its merits, resolve what's blocking, and merge — then heal `main`. (`/crew:merge` and `/crew:approve` remain in the plugin; `/pulls` is the new holistic path, not a replacement you must remove.)
 
-**The control-surface inversion (the core idea).** `/crew:merge` merged only what a human green-lit — a label or an Approval. That checkpoint is the multi-hour bottleneck this skill exists to delete. So **`/pulls` merges by DEFAULT.** The only human brake is a **COMMENT on the MR**:
+**The control-surface inversion (the core idea).** `/crew:merge` merged only what a human green-lit — a label or an Approval. That checkpoint is the multi-hour bottleneck this skill exists to delete. So **`/pulls` merges by DEFAULT.** The only human brake is an **unresolved, human-authored COMMENT on the MR** — EITHER a **review thread** (a comment on a diff line) OR a **top-level conversation / issue comment** on the PR:
 - A human comment that says **don't merge** / any blocking directive → **PARK** the MR (do not merge), continue to the next.
 - A human comment that asks a **QUESTION** → `merge-judge` posts a substantive answer/context as a reply, then **PARK**, continue.
-- The **UNBLOCK signal is the human resolving the GitHub conversation THREAD** (the native "Resolve conversation"). You read it via GraphQL `reviewThreads.isResolved` — **REST / `gh pr view` does not expose it.** **You will NOT merge while ANY unresolved HUMAN-authored review thread exists on the MR.** Only **human-authored unresolved** threads block; **agent / bot comments must NEVER self-block** (your own answers, audit comments, and markers don't gate you). **Dedup every reply on a hidden marker comment** so a question is never answered twice across sweeps.
+- The **UNBLOCK signal is the human releasing the park** — for a review thread, **resolving the GitHub conversation THREAD** (the native "Resolve conversation"); you read it via GraphQL `reviewThreads.isResolved` (**REST / `gh pr view` does not expose it**). **Top-level comments have no resolvable thread state**, so for those the release is **removing the hold label** (Change 2 below). **You will NOT merge while ANY unresolved HUMAN-authored comment — review thread OR top-level — brakes the MR.** Only **human-authored** comments block; **agent / bot comments must NEVER self-block** (your own answers, audit comments, and markers don't gate you). **Dedup every reply on a hidden marker comment** so a question is never answered twice across sweeps.
 
 **There is NO conservative defer-to-human bar.** `/crew:approve`'s low-risk bar (`approve/SKILL.md`) exists to decide which MRs a *human* should still eyeball — a bottleneck by design. `/pulls` has no such bar; re-creating it would re-create the stall. **Default = MERGE.** You park only on **(a)** a human block/question thread, or **(b)** a concrete **self-found blocker** — e.g. an open CRITICAL the prior verdict waved through, or a diff that plainly breaks intent. "This looks risky, leave it for a human" is **not** a move you own (there is no approval gate).
 
@@ -36,7 +36,8 @@ Before touching any MR, establish the environment. Stop with a clear message if 
    - **Board** status names *if a board is configured*: **In progress**, **In review**, the **`status-done`** (Done / merged) column, and the **needs-human / parked** column (where a parked card lands).
    - **`merge-method`** — `squash` (default) | `merge` | `rebase`.
    - **Base branch**, **branch convention**.
-   - **`pulls-triage-label`** (default `pulls-triage`) — the label on the durable triage tracking issue.
+   - **`pulls-triage-label`** (default `pulls-triage`) — the label on the per-run triage tracking issue.
+   - **`pulls-hold-label`** (default `waiting-for-human`) — the hold label applied when an MR is parked; removing it releases the park.
    - The **gate commands** for healing main: lint / format / unit / e2e (`lint-cmd`, `format-cmd`, `test-cmd`, `e2e-cmd`), and the **stack-run config** (start command / readiness check / per-ticket isolation) needed to bring up an isolated stack and to fix a blocker.
    If there is no `## Workflow Config`, stop: "No `## Workflow Config` found. Run `/crew:adjust`."
 4. **Establish this run's identity (§4.13).** Set `RUN_ID = <host>:<pid>:<start-epoch>` — `hostname`, this orchestrator's own Claude process PID (e.g. `ps -o ppid= -p $$` resolves the Claude process owning the shell), and the current epoch. You stamp it on every MR you claim so a parallel `/crew:run` or `/crew:pulls` can tell your in-flight work from its own; hold it for the whole run.
@@ -47,12 +48,12 @@ Before touching any MR, establish the environment. Stop with a clear message if 
 
 ---
 
-## Phase 1 — Holistic triage (dispatch `pull-triage` once, then incremental refresh)
+## Phase 1 — Holistic triage (dispatch `pull-triage` once at run start)
 
-Survey the **whole** open ready-for-review MR set as a SET before working any single one — relationships (file overlap, dependency order, supersession) only show up across the set. **Dispatch `pull-triage` once at loop start**, then **refresh it incrementally** as the set changes.
+Survey the **whole** open ready-for-review MR set as a SET before working any single one — relationships (file overlap, dependency order, supersession) only show up across the set. **Dispatch `pull-triage` once at run start.**
 
-- `pull-triage` surveys ALL open ready MRs, grounds in the codebase enough to understand their relationships, and **produces or refreshes a durable TRACKING ISSUE** (labeled `pulls-triage-label`) holding the plan: per-MR classification, advisory dependency + ordering hints (file-overlap / conflict-likelihood), and any MR carrying an unresolved human thread. The tracking issue **doubles as board visibility** — a human can read the whole plan at a glance.
-- The plan is **ADVISORY + LIVING.** It **seeds ordering** for the per-MR loop; it is **never a frozen sequence you replay.** Refresh it **incrementally** — top up new / changed MRs as they appear, and trigger a **full re-run only on large divergence** (the open set has shifted substantially since the last survey). A single new MR is a top-up, not a re-survey.
+- `pull-triage` surveys ALL open ready MRs, grounds in the codebase enough to understand their relationships, and **OPENS A NEW per-run TRACKING ISSUE** (labeled `pulls-triage-label`, title + body stamped with this run's `RUN_ID`, the current open-set snapshot, and the plan): per-MR classification, advisory dependency + ordering hints (file-overlap / conflict-likelihood), and any MR carrying an unresolved human comment. The tracking issue **doubles as board visibility** — a human can read the whole plan at a glance. On **resume**, reuse YOUR OWN still-open triage issue (matched by `RUN_ID`); **never adopt or close another run's issue.**
+- The plan is **ADVISORY.** It **seeds ordering** for the per-MR loop; it is **never a frozen sequence you replay.** The orchestrator re-derives the live candidate every iteration and is free to diverge. The issue's lifespan **is the run** — opened at run start (here), closed at run end (Phase 2).
 - `pull-triage` **changes no code and merges nothing** — it is the cross-MR brain, nothing else (see its agent file).
 
 ---
@@ -66,7 +67,7 @@ Steps 2–10 are **one MR**. After Step 10, loop back to Step 2. You keep **no o
 Re-fetch the open ready MRs' **LIVE** state — never act on Phase-1 data:
 
 - `gh pr list --state open --json number,title,createdAt,isDraft,mergeable,mergeStateStatus,statusCheckRollup,labels,headRefName,baseRefName` → drop `isDraft=true`.
-- For each, read the **claim markers** (the latest `crew:claim`) and the **unresolved-human-thread** signal via GraphQL `reviewThreads.isResolved` (filter to **human-authored** threads — agent/bot threads never count).
+- For each, read the **claim markers** (the latest `crew:claim`) and the **unresolved-human-comment** signal — review threads via GraphQL `reviewThreads.isResolved` AND top-level conversation/issue comments (filter to **human-authored** — agent/bot comments never count).
 - **Pick the next eligible candidate using the triage tracking issue's hints as ORDERING INPUT ONLY** — never replay its sequence. Eligible = open, non-draft, not peer-owned (§4.13). Greedy: take the best-ordered eligible MR each iteration; the set may have changed since the last pass.
 
 **If no eligible MR remains** (all merged / parked / peer-owned) → the per-MR loop ENDS. Go to **Phase 2** (heal main).
@@ -79,12 +80,14 @@ Stamp an **identity-bearing** `crew:claim` marker carrying your `RUN_ID` on the 
 
 ### Step 4 — Read the control surface (the only human brake)
 
-Detect **unresolved HUMAN-authored review threads** via GraphQL `reviewThreads.isResolved` (REST / `gh pr view` does **not** expose `isResolved`). Branch:
-- **A question thread** → dispatch `merge-judge` to post a substantive, context-rich **answer as a reply** (deduped on a hidden marker comment so it's answered once across sweeps), then **PARK**.
-- **A blocking directive thread** ("don't merge", any veto) → **PARK**.
-- **No unresolved human thread** → **proceed** to Step 5.
+Detect **unresolved, HUMAN-authored comments** — EITHER a **review thread** (diff-line comment, via GraphQL `reviewThreads.isResolved`; REST / `gh pr view` does **not** expose `isResolved`) OR a **top-level conversation / issue comment** on the PR. Branch:
+- **A question** (thread or top-level) → dispatch `merge-judge` to post a substantive, context-rich **answer as a reply** (deduped on a hidden marker comment so it's answered once across sweeps), then **PARK**.
+- **A blocking directive** ("don't merge", any veto — thread or top-level) → **PARK**.
+- **No unresolved human comment** → **proceed** to Step 5.
 
-**PARK** = move the card → the **needs-human / parked** column (board only), post **ONE deduped** park comment (the reason), and **CONTINUE the loop** (go to Step 2). **Never block the loop on a human reply** — a literal human-wait reproduces the FT-9 multi-hour stall class. Agent/bot threads (your own answers, markers, audit comments) are **not** human-authored and never park you.
+**RELEASE signals** (EITHER clears the park, re-checked every sweep): the human **RESOLVES the review thread** (for review-thread parks — already works), OR **REMOVES the hold label** (works for ANY park, including top-level-comment parks that have no resolvable thread). When this Step observes a park's block is cleared — no remaining unresolved human comment / the thread resolved / the hold label removed — **proceed** to Step 5 (and Step 8 removes the orchestrator's own hold label if it's still present).
+
+**PARK** = move the card → the **needs-human / parked** column (board only), apply the **hold label** read from `## Workflow Config` key **`pulls-hold-label`** (default `waiting-for-human`), post **ONE deduped** park comment (the reason **and** the release instruction — e.g. "To release: resolve the thread, or remove the `<pulls-hold-label>` label."), and **CONTINUE the loop** (go to Step 2). **Never block the loop on a human reply** — a literal human-wait reproduces the FT-9 multi-hour stall class. Agent/bot comments (your own answers, markers, audit comments) are **not** human-authored and never park you.
 
 ### Step 5 — Independent judgment (dispatch `merge-judge`)
 
@@ -116,7 +119,7 @@ Poll the **gh checks API** / `statusCheckRollup` until the required checks **SET
 
 ### Step 8 — Merge
 
-1. **Re-confirm the live state the instant before merging (§4.11):** re-fetch `gh pr view <n> --json mergeable,mergeStateStatus,statusCheckRollup,isDraft` and re-check the unresolved-human-thread signal (a human may have commented since Step 4). Proceed only if it's mergeable, CI is green, non-draft, and **no unresolved human thread exists.** State drifts between listing and merging — never merge on stale data.
+1. **Re-confirm the live state the instant before merging (§4.11):** re-fetch `gh pr view <n> --json mergeable,mergeStateStatus,statusCheckRollup,isDraft` and re-check the unresolved-human-comment signal — review threads AND top-level comments (a human may have commented since Step 4). Proceed only if it's mergeable, CI is green, non-draft, and **no unresolved human comment exists.** When merging an MR that was previously parked, **remove the orchestrator's own `pulls-hold-label`** if it is still present. State drifts between listing and merging — never merge on stale data.
 2. **Merge** with the configured method: `gh pr merge <n> --squash --delete-branch` (`--merge` / `--rebase` per `merge-method`). **NEVER pass `--admin` and never override branch protection** — if GitHub refuses (protection, a required check, branch behind), that's a **blocker to escalate** (park with the reason), not something to force.
 3. **Confirm `state == MERGED` by re-reading (§4.11)** — not by the `gh pr merge` exit code.
 
@@ -147,9 +150,11 @@ The sweep just merged a series of MRs into `main`; confirm `main` is actually he
    - **main broken →** **dispatch a fix in a SEPARATE MR** (`crew:implementation`, with `crew:qa` for tests). Run the **full gate** on that MR. Then **merge it by the SAME default-unless-vetoed rule** as the main loop — it is itself **vetoable by a human comment / unresolved thread** (Steps 4–8 apply). **Re-confirm main green** before declaring healed.
    - **CI can't run (detected outage) →** **WAIT / flag** — **never heal-on-optimism.** Re-confirm green only against a real run.
 
-### Phase 3 — Cleanup
+### Phase 3 — Cleanup + close the triage issue
 
-**Non-forced only (§4.10).** `git worktree remove` (plain, no `--force`) + `git worktree prune`, and **reclaim orphan trees** whose MR is **merged/closed AND no live peer owns** (§4.13). **NEVER `--force` / `rm -rf`** — a forced or recursive delete trips the sandbox's own approval prompt and hangs the run. **Leave-and-log** anything that refuses (untracked build artifacts) with the reclaim command for the summary; a later `git worktree prune` / human cleanup reclaims the disk.
+**Close the per-run triage issue.** Now that the queue drained and main is healed, post the **sweep-complete summary** to YOUR OWN triage tracking issue (matched by `RUN_ID`) and **CLOSE it** (`gh issue close` with `stateReason: completed`). **Never close another run's issue** — only the one carrying this run's `RUN_ID`. Verify the close landed (§4.11).
+
+**Worktrees — non-forced only (§4.10).** `git worktree remove` (plain, no `--force`) + `git worktree prune`, and **reclaim orphan trees** whose MR is **merged/closed AND no live peer owns** (§4.13). **NEVER `--force` / `rm -rf`** — a forced or recursive delete trips the sandbox's own approval prompt and hangs the run. **Leave-and-log** anything that refuses (untracked build artifacts) with the reclaim command for the summary; a later `git worktree prune` / human cleanup reclaims the disk.
 
 ---
 
@@ -161,7 +166,7 @@ When the per-MR loop ends and main is healed, stop and report:
 - **Parked:** each MR you parked — #, and **why** (human block thread / human question answered / concrete self-found blocker / cap hit), and the column it was parked in.
 - **Owned elsewhere:** any MR skipped because a live peer holds its §4.13 claim.
 - **Main:** healed (green), or healed-via-fix-MR #N, or flagged (outage — re-run the gate).
-- **Triage issue:** the tracking issue # (and whether it was created or refreshed).
+- **Triage issue:** the per-run tracking issue # (opened at run start, closed at run end).
 
 Then stop. Don't poll; re-invoke to continue.
 
@@ -184,7 +189,7 @@ There is no separate resume machinery beyond this reconstruction; the loop simpl
 
 Dispatch via the Agent tool, same shape as `/crew:run`:
 
-- **`pull-triage`** — `model: opus`, `effort: ultracode`. The cross-MR brain; dispatched **once** at Phase 1 loop start and **for incremental refresh** when the set diverges. cwd at the repo root (it surveys the whole set, not one worktree).
+- **`pull-triage`** — `model: opus`, `effort: ultracode`. The cross-MR brain; dispatched **once** at Phase 1 run start to open the per-run triage issue. cwd at the repo root (it surveys the whole set, not one worktree).
 - **`merge-judge`** — `model: opus`, `effort: ultracode`. The per-MR decision + question responder; dispatched **once per candidate** in Step 5 (and Step 4 for a question reply). cwd = the MR's context (a worktree if one is up, else the repo root for a diff read).
 - **`crew:implementation`** — `model: opus`, `effort: ultracode`, **fix mode** — for **conflict resolution** (Step 6, brief: "resolve these merge conflicts against `<base>`, preserving both intents") and **CI fixes** (Step 7). cwd = the **MR worktree**. Pass the **orchestrator-owned round counters** (`fix round F`).
 - **`crew:qa`** — `model: opus`, `effort: ultracode` — for a **test-related CI** failure, against the running stack you brought up. cwd = the MR worktree.
@@ -201,7 +206,8 @@ Each prompt carries the working directory, the MR/issue numbers, the relevant `#
 Everything project-specific is read from `## Workflow Config` in `CLAUDE.md` at runtime — **origin-agnostic**, never hardcoded. Keys this skill reads:
 - **Board** status names (In progress, In review, `status-done`, the needs-human / parked column) — *if a board is configured.*
 - **`merge-method`** (default `squash`), **base branch**, **branch convention**.
-- **`pulls-triage-label`** (default `pulls-triage`) — the triage tracking-issue label.
+- **`pulls-triage-label`** (default `pulls-triage`) — the per-run triage tracking-issue label.
+- **`pulls-hold-label`** (default `waiting-for-human`) — the hold label applied on park; removing it releases the park.
 - **Gate commands** for healing main: `lint-cmd`, `format-cmd`, `test-cmd`, `e2e-cmd`; and the **stack-run config** (start command / readiness check / per-ticket isolation).
 - **`crew-identity`** block (§4.17) — optional bot identity.
 
@@ -214,9 +220,9 @@ Never embed an org, repo, board, column, label, or tool name in this file. Read 
 **DO:**
 
 - **Merge by DEFAULT** — `/pulls` is the inverted control surface (§4.19): no human green-light gates a merge. Park only on a human block/question thread or a concrete self-found blocker.
-- **Treat the human COMMENT as the only brake** — a blocking directive parks; a question gets a `merge-judge` reply (deduped on a hidden marker) then parks; the human UNBLOCKS by **resolving the GitHub thread** (read `reviewThreads.isResolved` via **GraphQL** — REST doesn't expose it).
-- **Never merge while an unresolved HUMAN-authored review thread exists** — and **never self-block on agent/bot comments** (your own answers, markers, audit comments don't gate you).
-- **PARK and CONTINUE — never wait inline** for a human (a literal human-wait is the FT-9 stall). Parking moves the card to needs-human/parked, posts ONE deduped comment, and advances.
+- **Treat the human COMMENT as the only brake** — a review thread OR a top-level conversation/issue comment; a blocking directive parks, a question gets a `merge-judge` reply (deduped on a hidden marker) then parks. The human UNBLOCKS by **resolving the GitHub thread** (read `reviewThreads.isResolved` via **GraphQL** — REST doesn't expose it) OR by **removing the `pulls-hold-label`** (the only release for top-level-comment parks, which have no resolvable thread).
+- **Never merge while an unresolved HUMAN-authored comment exists** — review thread OR top-level — and **never self-block on agent/bot comments** (your own answers, markers, audit comments don't gate you).
+- **PARK and CONTINUE — never wait inline** for a human (a literal human-wait is the FT-9 stall). Parking moves the card to needs-human/parked, applies the `pulls-hold-label`, posts ONE deduped comment stating the release instruction, and advances.
 - **Re-derive every iteration from GitHub** (§4.11) — keep ZERO on-disk state; the heavy survey is Phase 1, Step 2 is the cheap live re-confirm; use triage hints as ORDERING INPUT ONLY, never a frozen sequence.
 - **Stay thin** — do the git/`gh` plumbing yourself; **dispatch `crew:implementation`** for conflict resolution (preserving both intents against a **freshly-fetched** base §4.15) and CI fixes; never hand-edit a conflict.
 - **Always re-run CI after a judgment-bearing resolution** — new code invalidates the prior green; never merge a resolved MR on stale-green CI. Decide CI from the **checks API**, never a notification (§4.18).
@@ -232,7 +238,7 @@ Never embed an org, repo, board, column, label, or tool name in this file. Read 
 **DON'T:**
 
 - **Add a conservative defer-to-human bar** — `/pulls` has none. There is no "this is risky, leave it for approval" move; default is MERGE. (That bar is `/crew:approve`'s job, and re-creating it re-creates the bottleneck.)
-- **Self-block on agent/bot comments** — only human-authored unresolved threads brake you. Your own reply, marker, or audit comment must never park you.
+- **Self-block on agent/bot comments** — only human-authored unresolved comments (review thread or top-level) brake you. Your own reply, marker, or audit comment must never park you.
 - **Wait inline for a human** — no `AskUserQuestion`, no plan-mode pause, no "wait for the reply." Park and continue. A human-wait reproduces the multi-hour stall (FT-9).
 - **Read `isResolved` from REST / `gh pr view`** — it isn't exposed there. Use GraphQL `reviewThreads.isResolved`.
 - **Merge over a red or missing required check** — red is a fix trigger; a detected Actions outage means skip & revisit, never merge over a missing check. Never `--admin`, never override branch protection (a refusal is a blocker to escalate).
@@ -254,7 +260,8 @@ If you catch yourself thinking any of these, stop:
 - _"The notification didn't fire, so I'll keep waiting."_ — STOP. **Reconcile from GitHub / the checks API** (§4.18). The durable artifact (merge state, pushed commit, settled checks) is the truth; the notification is only a hint.
 - _"This MR looks risky, I'll leave it for a human to approve."_ — STOP. **There is no approval gate.** Merge unless a **human thread** blocks/questions or **you found a concrete blocker**. "Risky" alone is not a park reason.
 - _"I'll force-remove the worktree."_ — STOP. **Non-forced only (§4.10).** `git worktree remove` plain; if it refuses, leave-and-log. `--force` / `rm -rf` trips the sandbox prompt and hangs the run.
-- _"The conversation has a bot comment that looks unresolved, so I won't merge."_ — STOP. **Only human-authored unresolved threads block.** Agent/bot comments (your own answers, markers, audit lines) never self-block.
+- _"The conversation has a bot comment that looks unresolved, so I won't merge."_ — STOP. **Only human-authored unresolved comments block** — review thread OR top-level. Agent/bot comments (your own answers, markers, audit lines) never self-block.
+- _"This park was on a top-level comment, there's no thread to resolve, so it can never release."_ — STOP. Top-level-comment parks release by the human **removing the `pulls-hold-label`** — re-checked each sweep, just like a resolved thread.
 - _"CI was green earlier, so I'll merge the resolved MR without re-running."_ — STOP. A judgment-bearing resolution is **new code that invalidates the prior green.** Re-run CI (Step 7) before merging.
 - _"`isResolved` isn't in the `gh pr view` JSON, so I'll assume it's resolved."_ — STOP. REST doesn't expose it. Read **GraphQL `reviewThreads.isResolved`** — don't merge on an absent field.
 - _"I'll just merge over this missing required check, it's probably an outage."_ — STOP. A detected outage means **skip & revisit**, never merge over a missing check. Serial is the safe floor; a red check is a fix trigger.
