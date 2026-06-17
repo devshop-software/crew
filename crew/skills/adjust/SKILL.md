@@ -159,9 +159,9 @@ If the board's real columns differ (e.g. `Backlog` / `Doing` / `Review` / `Needs
 
 ### 5d — The priority field (Issue Field, org-only)
 `/crew:run` picks the **highest-priority** `agent-ready` ticket first, oldest within a tier (§4.5). On GitHub, **Priority is an org-level *Issue Field*** (default options Urgent/High/Medium/Low) stored on the issue — **not** a Projects-v2 single-select. (A project may show a same-named but **empty shell** field; don't use it — `gh project field-list` reports `options: []` for it. The real values live on the issue.)
-- **Detect it:** `gh api orgs/<owner>/issue-fields` → find a `single_select` field named `Priority` (or the project's convention). Record its name as `priority-field` (default `Priority`). Each option carries a `priority` int (lower = higher rank); run reads the live ranks at selection time, so you only record the **name**.
+- **Detect it (GraphQL, NOT the blank REST path — FT-29):** the field lives on the **org issue-fields** API behind the `GraphQL-Features: issue_fields` header — `gh api orgs/<owner>/issue-fields` (REST) and any Projects-v2 field query return blank. Run: `gh api graphql -H "GraphQL-Features: issue_fields" -f query='query($o:String!){organization(login:$o){issueFields(first:50){nodes{__typename ... on IssueFieldSingleSelect{id name options{id name}}}}}}' -F o=<owner>` → find the `IssueFieldSingleSelect` named `Priority` (or the project's convention). Record its name as **`priority-field`** (default `Priority`) **and its id as `priority-field-id`** (e.g. `IFSS_…`) so `/crew:plan` + `/crew:groom` skip re-resolving it. The option order is the rank (Urgent highest).
 - **Org-only:** issue fields exist only on **org**-owned repos. On a user repo (or if the org has no Priority issue field), record `priority-field: none`; the loop falls back to a `priority:*` **label** scheme if present (record as `priority-labels`, e.g. `high,medium,low`), else pure oldest-first. Note the fallback.
-- **Scope:** reading issue fields (and the board) needs a token with org/project read scopes; if `gh api orgs/<owner>/issue-fields` errors with `INSUFFICIENT_SCOPES`, tell the user to run `gh auth refresh -s read:project,read:org`.
+- **Scope:** reading/writing issue fields (and the board) needs a token with org read scopes **plus** the `issue_fields` feature header; if the GraphQL query errors with `INSUFFICIENT_SCOPES`, tell the user to run `gh auth refresh -s read:project,read:org`. (Writes — `setIssueFieldValue`, used by `/crew:plan` + `/crew:groom` — use the same header.)
 
 ---
 
@@ -322,6 +322,7 @@ Assemble the full block and show it before writing. Ask **"Does this look right?
 | mr-reviewer | `<github-user>`  *(or `none`)* |
 | board | `<project number / URL>`  *(or `none`)* |
 | priority-field | `Priority`  *(or `none`)* |
+| priority-field-id | `IFSS_…`  *(the org issue-field node id; lets plan/groom skip re-resolving — §5d)* |
 | status-todo | `TODO` |
 | status-in-progress | `In progress` |
 | status-in-review | `In review` |
