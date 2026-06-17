@@ -26,7 +26,7 @@ Activate when called from the `/crew:ticket` command. Otherwise ignore.
 `$ARGUMENTS` selects the mode:
 
 - **empty** → **interview mode** (Steps 0–6 below): interview the user and write **one** new ticket. The default.
-- **`condense` [#…]** → **Condense Mode** (the section at the end): batch the open `review-followup` tickets `crew:findings` filed into a handful of right-sized `agent-ready` tickets. No interview.
+- **`condense` [#…]** → **Condense Mode** (the section at the end): batch the open `review-followup` tickets `crew:findings` filed into a handful of right-sized tickets. No interview. *(Condensing is now owned by `/crew:groom`; `condense` here is a thin alias kept for one release — see the note under Condense Mode.)*
 
 ---
 
@@ -182,6 +182,8 @@ If you catch yourself thinking any of these, stop:
 ---
 
 ## Condense Mode (`/crew:ticket condense [#…]`)
+
+> **Superseded by `/crew:groom` (kept as a thin alias for one release).** The planning layer's `/crew:groom` owns condensing now — it runs the same clustering across **all** inflow channels (not just `review-followup`), reconciles milestones/priority/chains, and files **`agent-planned`** for gated human promotion instead of writing `agent-ready` directly. `/crew:ticket condense` remains a thin alias to that consolidate path for one release, then is removed. Prefer `/crew:groom`.
 
 A **batch-planning** pass, not an interview. The small `review-followup` tickets `crew:findings` files at the end of each run aren't worth a full `/crew:run` each — the worktree + stack + five-agent chain dwarfs the work. Condense **clusters** the open `review-followup` tickets into a **handful of right-sized `agent-ready` tickets** the loop clears in one pass each, then closes the originals as rolled-into.
 

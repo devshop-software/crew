@@ -1,6 +1,6 @@
 ---
 name: adjust
-description: "Onboards a project for the crew loop — scans the structure, detects and validates the test / lint / build / e2e and app-start commands, detects the GitHub remote and optional Projects board, offers a one-time gated bare-clone worktree migration, advises on setup gaps, and writes a Workflow Config block into CLAUDE.md (commands, ticket-source label, board columns incl. a needs-human/blocked and a done column, the priority field, the review-followup + merge-approval labels and merge method, branch convention, worktree layout, and the stack-run config: start command / readiness check / per-ticket isolation, and an optional GitHub App crew-identity — installing + testing its token helper) that every other component reads at runtime. Use when the user invokes /crew:adjust."
+description: "Onboards a project for the crew loop — scans the structure, detects and validates the test / lint / build / e2e and app-start commands, detects the GitHub remote and optional Projects board, offers a one-time gated bare-clone worktree migration, advises on setup gaps, and writes a Workflow Config block into CLAUDE.md (commands, ticket-source label, board columns incl. a needs-human/blocked and a done column, the priority field, the review-followup + merge-approval labels and merge method, branch convention, worktree layout, and the stack-run config: start command / readiness check / per-ticket isolation, and an optional GitHub App crew-identity — installing + testing its token helper; and the planning-layer keys — the agent-planned + epic labels, the planning-narrative wiki source, and the planning-promotion mode that /crew:plan and /crew:groom read) that every other component reads at runtime. Use when the user invokes /crew:adjust."
 ---
 
 # Adjust
@@ -131,6 +131,13 @@ The loop picks up open issues carrying an agent-ready label. Default: **`agent-r
 - Record the chosen name as `review-followup-label`. (Offer to create it in Step 9.)
 - **`findings-assignee`** (optional) — the GitHub user `crew:findings` assigns its filed follow-ups to, so they land in a human's queue. Ask: *"Assign `crew:findings`' follow-up tickets to a GitHub user? (a username, or none)"* — default to the user onboarding, or `none`. Record `findings-assignee`.
 - **`mr-reviewer`** (optional) — the GitHub user `/crew:run` requests as **reviewer** on each finished MR (so it lands in their review queue), and whose **Approval** green-lights it for `/crew:merge` (alongside the label). Default to the user onboarding, or `none`. Record `mr-reviewer`.
+
+### 5a-5 — The planning-layer labels + keys (§4.20)
+`/crew:plan` and `/crew:groom` (the planning layer) file tickets under a **not-yet-promoted** label and read a few planning keys. None of these auto-enter the run loop — a human always promotes.
+- **`agent-planned-label`** — what `/crew:plan` and `/crew:groom` file tickets as, deliberately distinct from `agent-ready` so planned/groomed work never auto-enters the loop; a human promotes it to `agent-ready` in chat. Default: **`agent-planned`**. Check `gh label list --search agent-planned`; substitute if the project uses another name. Record `agent-planned-label` (offer to create it in Step 9).
+- **`epic-label`** — the parent label `/crew:plan` puts on a large-milestone epic (the run loop skips epics; the sub-issues are the unit of work). Default: **`epic`**. Record `epic-label`.
+- **`planning-narrative`** — where the human-authored milestone narrative + the AI journey-map pages live. Default **`wiki`** (the repo's GitHub Wiki, a git-backed `<repo>.wiki.git` repo); `none` if the project keeps no wiki (then `/crew:plan` takes the narrative from the milestone description / the prompt). Confirm the repo has its **Wiki enabled** (Settings → Features); note it if not. Record `planning-narrative`.
+- **`planning-promotion`** — the promotion model. Default **`gated`** (the only path built today: `/crew:plan` + `/crew:groom` file `agent-planned`, print a digest, and a human promotes in chat — §4.12). `auto-veto` is a **documented-for-later** opt-in (the skill self-promotes provenance-eligible tickets and the human vetoes). Leave **`gated`** unless the user asks. Record `planning-promotion`.
 
 ### 5b — The board (optional)
 A GitHub Projects-v2 board is **optional**. If present, the loop reads and moves cards through it; if absent, the loop falls back to label-only selection.
@@ -307,6 +314,10 @@ Assemble the full block and show it before writing. Ask **"Does this look right?
 | agent-review-label | `agent-review` |
 | merge-approval-label | `approved` |
 | review-followup-label | `review-followup` |
+| agent-planned-label | `agent-planned`  *(planning layer — /crew:plan + /crew:groom file these, never agent-ready)* |
+| epic-label | `epic`  *(large-milestone parent; the run loop skips epics)* |
+| planning-narrative | `wiki`  *(or `none` — where the milestone narrative + AI journey-map pages live)* |
+| planning-promotion | `gated`  *(or `auto-veto` — documented-for-later opt-in)* |
 | findings-assignee | `<github-user>`  *(or `none`)* |
 | mr-reviewer | `<github-user>`  *(or `none`)* |
 | board | `<project number / URL>`  *(or `none`)* |
@@ -358,6 +369,8 @@ After writing, surface (don't auto-fix) the gaps that will bite the loop:
 - **No `agent-review` label yet** — offer to create it: `gh label create <agent-review-label> --color FBCA04 --description "Backlog finding — for human planning"`. `/crew:improve` files backlog tickets under it; without the label it can't tag them. (`crew:findings` files unlabeled, MR-blocked tickets and doesn't need it.)
 - **No merge-approval (`approved`) label yet** — offer to create it: `gh label create <merge-approval-label> --color 0E8A16 --description "Approved to merge — /crew:merge will land it"`. Without it, `/crew:merge` has no green-light signal and merges nothing.
 - **No `review-followup` label yet** — offer to create it: `gh label create <review-followup-label> --color 5319E7 --description "Review follow-up from crew — small, MR-blocked backlog"`. `crew:findings` files small follow-ups under it and `/crew:ticket condense` batches them; without it findings can't tag them.
+- **No `agent-planned` label yet** — offer to create it: `gh label create <agent-planned-label> --color C5DEF5 --description "Planned by /crew:plan or /crew:groom — awaiting human promotion"`. The planning layer files its tickets under it; a human promotes them to `agent-ready` in chat. Without it `/crew:plan` and `/crew:groom` can't tag their output.
+- **No project Wiki (planning-narrative)** — `/crew:plan` reads the human-authored milestone narrative from the repo's GitHub Wiki. If the Wiki isn't enabled, note it: enable it (repo Settings → Features) and author one page per milestone, or set `planning-narrative: none` to take the narrative from the milestone description instead. Don't enable it for them.
 - **No board** — fine; note the loop will run label-only (oldest agent-ready issue first) and won't move cards. Mention a board adds visible TODO → In review tracking and an escalation column.
 - **No e2e framework** — warn: `crew:qa` extends a whole-app e2e suite and has nothing to extend without one. Suggest Playwright or Cypress; don't install it.
 - **No `start-cmd` (stack)** — warn: `crew:qa` (e2e) and `crew:reviewer` (Playwright) need the app running. With `start-cmd: none` they have no live stack to drive; suggest wiring a dev-server or `docker compose` target. Don't fabricate one.
@@ -402,6 +415,7 @@ When invoked with `update` or a specific key:
 - Confirm GitHub auth and a default repo (Step 0) before writing anything — the loop is GitHub-driven.
 - Detect commands from actual project files, then **run them** to validate.
 - Capture the full ticket-source + merge contract: `agent-ready-label`, `agent-review-label` (the `/crew:improve` backlog), `review-followup-label` (where `crew:findings` files small follow-ups and `/crew:ticket condense` reads them — default `review-followup`), `merge-approval-label` (the `/crew:merge` go-ahead — default `approved`), the board statuses (TODO / In progress / In review / **`status-done`** / a **needs-human/blocked** column), the **`priority-field`** (priority-ordered selection, §4.5), `branch-convention`, `merge-method`, and `auto-merge` (opt-in low-risk auto-merge, default `off`, §4.16) — the loop, `/crew:merge`, and `/crew:ticket condense` read exactly these keys.
+- Capture the **planning-layer keys** (§4.20): `agent-planned-label` (what `/crew:plan` + `/crew:groom` file — never `agent-ready`), `epic-label`, `planning-narrative` (the milestone-narrative Wiki source, default `wiki`), and `planning-promotion` (default `gated`; `auto-veto` documented for later). `/crew:plan` and `/crew:groom` read exactly these.
 - Capture the **stack-run config** (`start-cmd`, `readiness-check`, `port`, `isolation-scheme`) and **validate** it by bringing the stack up under an issue-derived isolation and tearing it down — qa and reviewer depend on a running, isolated stack.
 - Offer the **bare-clone worktree migration** only with explicit consent; record `worktree-layout` either way. Preserve the old repo on migration; never auto-delete it.
 - Offer the optional **crew identity** (§4.17): on consent, install the bundled token-helper + key per machine and **test it (mint a token, confirm repo reach) before recording** the `crew-identity` block; never write a block the helper can't use. No consent → omit it; the loop runs as the user.
