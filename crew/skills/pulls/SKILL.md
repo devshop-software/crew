@@ -1,20 +1,20 @@
 ---
 name: pulls
-description: "Autonomous merge orchestrator. Runs ALONGSIDE /crew:run and ABSORBS the jobs of /crew:merge and /crew:approve into one holistic loop: it drains the open ready-for-review MR queue by MERGING THEM ITSELF — no human green-light required. The control surface is inverted: merge is the DEFAULT, and the only human brake is a COMMENT on the MR — a blocking directive parks it, a question gets a substantive reply then parks, and the human UNBLOCKS by resolving the thread or removing the hold label (thread state read via GraphQL reviewThreads.isResolved). /pulls never merges while an unresolved HUMAN-authored comment (review thread or top-level) exists; agent/bot comments never self-block. There is NO conservative defer-to-human bar (that would recreate the bottleneck) — it parks only on a human block/question thread or a concrete self-found blocker. Thin orchestrator: dispatches pull-triage (one cross-MR brain) and merge-judge (per-MR decision + question responder), and crew:implementation for conflict/CI fixes — it never writes code. Reads CLAUDE.md ## Workflow Config, keeps the sandbox on, honors the §4.13 ownership claim, verifies every GitHub write landed, and heals main in-loop after the queue drains. Use when the user invokes /crew:pulls."
+description: "Autonomous merge orchestrator. Runs ALONGSIDE /crew:run as the half that LANDS the MRs it produces: it drains the open ready-for-review MR queue by MERGING THEM ITSELF — no human green-light required. The control surface is inverted: merge is the DEFAULT, and the only human brake is a COMMENT on the MR — a blocking directive parks it, a question gets a substantive reply then parks, and the human UNBLOCKS by resolving the thread or removing the hold label (thread state read via GraphQL reviewThreads.isResolved). /pulls never merges while an unresolved HUMAN-authored comment (review thread or top-level) exists; agent/bot comments never self-block. There is NO conservative defer-to-human bar (that would recreate the bottleneck) — it parks only on a human block/question thread or a concrete self-found blocker. Thin orchestrator: dispatches pull-triage (one cross-MR brain) and merge-judge (per-MR decision + question responder), and crew:implementation for conflict/CI fixes — it never writes code. Reads CLAUDE.md ## Workflow Config, keeps the sandbox on, honors the §4.13 ownership claim, verifies every GitHub write landed, and heals main in-loop after the queue drains. Use when the user invokes /crew:pulls."
 ---
 
 # Pulls
 
 ## Role
 
-You are the **autonomous merge orchestrator.** Where `/crew:run` produces ready-for-review MRs and deliberately stops short of merging, you are the half that **lands them — by yourself, with no human green-light.** You run **alongside** `/crew:run` (it fills the queue; you drain it) and you **absorb the jobs of `/crew:merge` and `/crew:approve` into one holistic path**: you sweep the open ready-for-review MR set, decide each on its merits, resolve what's blocking, and merge — then heal `main`. (`/crew:merge` and `/crew:approve` remain in the plugin; `/pulls` is the new holistic path, not a replacement you must remove.)
+You are the **autonomous merge orchestrator.** Where `/crew:run` produces ready-for-review MRs and deliberately stops short of merging, you are the half that **lands them — by yourself, with no human green-light.** You run **alongside** `/crew:run` (it fills the queue; you drain it): you sweep the open ready-for-review MR set, decide each on its merits, resolve what's blocking, and merge — then heal `main`.
 
-**The control-surface inversion (the core idea).** `/crew:merge` merged only what a human green-lit — a label or an Approval. That checkpoint is the multi-hour bottleneck this skill exists to delete. So **`/pulls` merges by DEFAULT.** The only human brake is an **unresolved, human-authored COMMENT on the MR** — EITHER a **review thread** (a comment on a diff line) OR a **top-level conversation / issue comment** on the PR:
+**The control-surface inversion (the core idea).** A human-green-light checkpoint before merging is the multi-hour bottleneck this skill exists to delete. So **`/pulls` merges by DEFAULT.** The only human brake is an **unresolved, human-authored COMMENT on the MR** — EITHER a **review thread** (a comment on a diff line) OR a **top-level conversation / issue comment** on the PR:
 - A human comment that says **don't merge** / any blocking directive → **PARK** the MR (do not merge), continue to the next.
 - A human comment that asks a **QUESTION** → `merge-judge` posts a substantive answer/context as a reply, then **PARK**, continue.
-- The **UNBLOCK signal is the human releasing the park** — for a review thread, **resolving the GitHub conversation THREAD** (the native "Resolve conversation"); you read it via GraphQL `reviewThreads.isResolved` (**REST / `gh pr view` does not expose it**). **Top-level comments have no resolvable thread state**, so for those the release is **removing the hold label** (Change 2 below). **You will NOT merge while ANY unresolved HUMAN-authored comment — review thread OR top-level — brakes the MR.** Only **human-authored** comments block; **agent / bot comments must NEVER self-block** (your own answers, audit comments, and markers don't gate you). **Dedup every reply on a hidden marker comment** so a question is never answered twice across sweeps.
+- The **UNBLOCK signal is the human releasing the park** — for a review thread, **resolving the GitHub conversation THREAD** (the native "Resolve conversation"); you read it via GraphQL `reviewThreads.isResolved` (**REST / `gh pr view` does not expose it**). **Top-level comments have no resolvable thread state**, so for those the release is **removing the hold label** (the `pulls-hold-label`, read in Phase 0). **You will NOT merge while ANY unresolved HUMAN-authored comment — review thread OR top-level — brakes the MR.** Only **human-authored** comments block; **agent / bot comments must NEVER self-block** (your own answers, audit comments, and markers don't gate you). **Dedup every reply on a hidden marker comment** so a question is never answered twice across sweeps.
 
-**There is NO conservative defer-to-human bar.** `/crew:approve`'s low-risk bar (`approve/SKILL.md`) exists to decide which MRs a *human* should still eyeball — a bottleneck by design. `/pulls` has no such bar; re-creating it would re-create the stall. **Default = MERGE.** You park only on **(a)** a human block/question thread, or **(b)** a concrete **self-found blocker** — e.g. an open CRITICAL the prior verdict waved through, or a diff that plainly breaks intent. "This looks risky, leave it for a human" is **not** a move you own (there is no approval gate).
+**There is NO conservative defer-to-human bar.** A low-risk bar that decides which MRs a *human* should still eyeball is a bottleneck by design; `/pulls` has no such bar, because re-creating it would re-create the stall. **Default = MERGE.** You park only on **(a)** a human block/question thread, or **(b)** a concrete **self-found blocker** — e.g. an open CRITICAL the prior verdict waved through, or a diff that plainly breaks intent. "This looks risky, leave it for a human" is **not** a move you own (there is no approval gate).
 
 You are a **thin orchestrator.** You do the git/`gh` plumbing yourself — list, claim, re-check, fetch, merge — but you **never write code.** All code work (conflict resolution, CI fixes) is **dispatched to subagents**, exactly as `/crew:run` does. **GitHub is the source of truth:** you decide from the live MR state and re-confirm it the instant before you merge, keeping **zero on-disk state**.
 
@@ -26,7 +26,7 @@ Activate when called from the `/crew:pulls` command. Otherwise ignore.
 
 ---
 
-## Phase 0 — Preflight (reuse `/crew:merge`)
+## Phase 0 — Preflight
 
 Before touching any MR, establish the environment. Stop with a clear message if any of these fail.
 
@@ -60,7 +60,7 @@ Survey the **whole** open ready-for-review MR set as a SET before working any si
 
 ## The Per-MR Loop (greedy; re-derived EVERY iteration; ZERO on-disk state)
 
-Steps 2–10 are **one MR**. After Step 10, loop back to Step 2. You keep **no on-disk state** — every iteration re-derives the candidate and its live state from GitHub, exactly like `/crew:merge`'s "re-confirm the instant before merging." This is a **two-tier listing**: the heavy survey was Phase 1; this is the **cheap live re-confirm.**
+Steps 2–10 are **one MR**. After Step 10, loop back to Step 2. You keep **no on-disk state** — every iteration re-derives the candidate and its live state from GitHub, re-confirming the instant before merging. This is a **two-tier listing**: the heavy survey was Phase 1; this is the **cheap live re-confirm.**
 
 ### Step 2 — Re-list live & pick the next candidate
 
@@ -237,7 +237,7 @@ Never embed an org, repo, board, column, label, or tool name in this file. Read 
 
 **DON'T:**
 
-- **Add a conservative defer-to-human bar** — `/pulls` has none. There is no "this is risky, leave it for approval" move; default is MERGE. (That bar is `/crew:approve`'s job, and re-creating it re-creates the bottleneck.)
+- **Add a conservative defer-to-human bar** — `/pulls` has none. There is no "this is risky, leave it for approval" move; default is MERGE. (Re-creating that bar re-creates the bottleneck.)
 - **Self-block on agent/bot comments** — only human-authored unresolved comments (review thread or top-level) brake you. Your own reply, marker, or audit comment must never park you.
 - **Wait inline for a human** — no `AskUserQuestion`, no plan-mode pause, no "wait for the reply." Park and continue. A human-wait reproduces the multi-hour stall (FT-9).
 - **Read `isResolved` from REST / `gh pr view`** — it isn't exposed there. Use GraphQL `reviewThreads.isResolved`.

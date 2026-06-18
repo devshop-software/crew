@@ -7,8 +7,8 @@ You write work as GitHub Issues; **`/crew:run`** drives each one to a ready-for-
 ## Skills
 
 - **`/crew:adjust`** — onboard a project: detect & validate the test / lint / build / e2e and app-start commands, the GitHub remote + optional Projects board, and write a `## Workflow Config` block into `CLAUDE.md` that the loop reads at runtime.
-- **`/crew:ticket`** — interview a feature into a well-formed, agent-ready GitHub Issue (Context / Out of scope / Acceptance criteria).
-- **`/crew:run`** — the orchestrator loop: pull the next `agent-ready` issue, triage it, and drive it through the bundled subagents (`implementation`, `qa`, `reviewer`, `mr-review`, `findings`) to a ready-for-review MR, then move on to the next. `findings` files the leftover advisory review findings as `agent-review` backlog tickets (never `agent-ready`) for a human to plan.
+- **`/crew:run`** — the orchestrator loop: pull the next `agent-ready` issue, triage it, and drive it through the bundled subagents (`implementation`, `qa`, `reviewer`, `mr-review`, `findings`) to a ready-for-review MR, then move on to the next. `findings` files the leftover advisory review findings as `review-followup` tickets (never `agent-ready`, blocked by the source ticket) for a human to plan.
+- **`/crew:pulls`** — the autonomous merge half: runs alongside `/crew:run` and drains the ready-for-review MR queue, merging by default with a human comment as the only brake (a block or question parks the MR; resolving the thread or removing the hold label releases it). Driven by the `pull-triage` and `merge-judge` agents.
 
 ## Install
 
@@ -19,7 +19,7 @@ Run inside Claude Code:
 /plugin install crew@devshop
 ```
 
-Then onboard your project with `/crew:adjust`, write a ticket with `/crew:ticket`, and start the loop with `/crew:run`.
+Then onboard your project with `/crew:adjust`, open `agent-ready` GitHub issues, and start the loop with `/crew:run` — with `/crew:pulls` running alongside to merge.
 
 ## License
 

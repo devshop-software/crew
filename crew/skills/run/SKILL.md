@@ -184,7 +184,7 @@ Runs only after a reviewer PASS **and a green CI gate (Step 9b)** — so it alwa
 After `mr-review` clears (`PROCEED`, or a `BOUNCE` resolved and re-cleared) and **before finalizing**, dispatch `crew:findings` once. This stops the advisory findings from evaporating (§5.8).
 
 - Task: read the **final** `crew:reviewer` and `crew:mr-review` MR comments, extract their **non-blocking** findings (MINOR, advisory MAJOR, out-of-scope-of-this-MR), **dedup against existing open `review-followup` issues**, and file **one issue per distinct actionable finding** — labeled **`review-followup`** and **blocked by the source ticket** (the issue this MR `Closes`, via a GitHub blocked-by dependency on its numeric database id) so GitHub auto-unblocks it when the MR merges — with a backlink to the MR + comment, file refs, severity. Post a short `crew:findings` summary comment on the MR listing the filed issue URLs (or "no actionable findings").
-- The filed issues are **`review-followup`-labeled, never `agent-ready`** (so the loop never picks them up — it only acts on `agent-ready`) and are **blocked by the source ticket** until the MR merges (GitHub auto-unblocks on merge-close); a human or `/crew:ticket condense` plans them post-merge.
+- The filed issues are **`review-followup`-labeled, never `agent-ready`** (so the loop never picks them up — it only acts on `agent-ready`) and are **blocked by the source ticket** until the MR merges (GitHub auto-unblocks on merge-close); a human plans them post-merge.
 - **Non-blocking:** a `crew:findings` failure is logged and does **not** hold up finalize — the MR still ships.
 - **Breakpoint `findings`** → pause here.
 
@@ -194,13 +194,13 @@ On overall pass (reviewer PASS, **CI green** (Step 9b), mr-review cleared, and `
 
 1. **Tear down the stack** you brought up in Step 6, and **verify it's actually gone.** A plain `kill $(lsof -ti :<port>)` can return a single/stale PID and miss the rest of the dev-server process tree (`pnpm → sh → node → next-server`), leaking the server for hours and wasting resources — use **`fuser -k <port>/tcp`** (or `docker compose -p <project> down`), which reaps **every** process bound to the port, then confirm the port is free (`lsof -i :<port>` returns nothing). Release the issue-derived ports and data namespace.
 2. **Delete the `progress_log`** file (`rm -f <progress_log path>`). GitHub now holds the full record.
-3. **Flip the MR draft → ready-for-review, then request the reviewer:** `gh pr ready <MR-number>` — **only with all required checks green, or under a logged CI-unavailable outage (Step 9b.4) with the local-green note posted**; if CI has run since the Step 9b gate, re-confirm green first and **never flip over a red check** (red is a fix trigger, not an outage). Then, if `## Workflow Config` sets **`mr-reviewer`**, request that user's review so the finished MR lands in their queue: `gh pr edit <MR-number> --add-reviewer <mr-reviewer>` (verify it registered, §4.11). **Skip the request if `mr-reviewer` is the MR's author** — GitHub forbids requesting review from the author (this only happens when crew runs as the user, not under its bot identity §4.17, where the author is the bot and the request succeeds). `/crew:merge` then green-lights the MR on that human's Approval *or* the merge-approval label.
+3. **Flip the MR draft → ready-for-review, then request the reviewer:** `gh pr ready <MR-number>` — **only with all required checks green, or under a logged CI-unavailable outage (Step 9b.4) with the local-green note posted**; if CI has run since the Step 9b gate, re-confirm green first and **never flip over a red check** (red is a fix trigger, not an outage). Then, if `## Workflow Config` sets **`mr-reviewer`**, request that user's review so the finished MR lands in their queue: `gh pr edit <MR-number> --add-reviewer <mr-reviewer>` (verify it registered, §4.11). **Skip the request if `mr-reviewer` is the MR's author** — GitHub forbids requesting review from the author (this only happens when crew runs as the user, not under its bot identity §4.17, where the author is the bot and the request succeeds).
 4. **Move the card → In review** (board only).
 5. **Remove the worktree:** `git worktree remove <worktree-path>` — the **non-forced** form, run sandboxed. It succeeds because a finalized tree holds only *ignored* artifacts (the copied `.env`, build output), which git removes without complaint. **Never pass `--force` and never fall back to `rm -rf`** — a forced or recursive filesystem delete trips the sandbox's own approval prompt (a separate gate from the permission system, *not* suppressed by `--dangerously-skip-permissions`) and **stalls the entire autonomous run** (§4.10). If the non-forced removal exceptionally refuses (a genuinely untracked or modified tracked file), **leave the worktree in place and log it** — a later `git worktree prune` / human cleanup reclaims the disk; never escalate to a forceful delete mid-run. The branch and MR remain on the remote for a human to merge.
 
 ### Step 12 — Loop
 
-**No auto-merge, no wait.** Do not merge; do not block on a human. **Loop to Step 2** for the next candidate ticket.
+**No merge, no wait.** Do not merge; do not block on a human. **Loop to Step 2** for the next candidate ticket.
 
 ---
 
@@ -277,7 +277,7 @@ This is the live-loop complement to Resume Detection: a stalled loop self-heals 
 When Step 2 finds no actionable ticket, stop and report:
 
 - **Shipped:** each ticket taken to ready-for-review this run — issue #, title, MR URL.
-- **Findings filed:** the count of (`review-followup`-labeled, MR-blocked) follow-up tickets `crew:findings` opened this run (with their issue #s), so the human sees what's queued for post-merge planning (and `/crew:ticket condense` can batch).
+- **Findings filed:** the count of (`review-followup`-labeled, MR-blocked) follow-up tickets `crew:findings` opened this run (with their issue #s), so the human sees what's queued for post-merge planning.
 - **Escalated:** each ticket that hit the 3-round cap — issue #, MR URL (still draft), the column it was parked in, and the recurring finding.
 - **Skipped:** each ticket triaged out this run — issue #, and whether it was a blocker (with the reason) or an epic/parent.
 - **Queue:** "No actionable `agent-ready` issues remain" (or the count still open but not pickable, e.g. already in-flight elsewhere or skipped).
@@ -320,7 +320,7 @@ Then stop. Do not poll for new tickets unless re-invoked.
 - Commit the `progress_log` or let it touch the diff.
 - Set `isolation: worktree` on agents — you own the single per-ticket worktree.
 - Hardcode any project-specific name — read them from `## Workflow Config`.
-- Auto-merge, or block the queue waiting for a human to merge — flip to ready-for-review and move on.
+- Merge, or block the queue waiting for a human to merge — flip to ready-for-review and move on.
 - **Ask the user anything mid-run** — no `AskUserQuestion`, no plan-mode pause, no "which path should I take?" menu. No human is watching; a prompt hangs the queue. Resolve every fork yourself from the defaults, or **skip-as-blocked / escalate** with a comment and advance (§ Role).
 - Reference npm, `crew init`, `crew update`, semantic-release, or a marketplace package — V2 ships as a Claude Code plugin; the loop is plugin-only.
 - Loop past 3 review FAILs — escalate and advance.
@@ -344,7 +344,7 @@ If you catch yourself thinking any of these, stop:
 - _"qa can just spin the app up itself"_ — STOP. You own the stack. Bring it up in Step 6 with issue-derived isolation, export the URL, and tear it down at finalize.
 - _"`kill $(lsof -ti :PORT)` returned, so the stack's down"_ — STOP. That often kills only one PID of the dev-server tree (`pnpm → sh → node → next-server`) and **leaks the server**. Tear down with `fuser -k <port>/tcp` (or `docker compose -p <project> down`) and confirm the port is free; sweep finalized-ticket ports before each bring-up (§4.8).
 - _"The board column is probably called 'Done', I'll just use that"_ — STOP. Read the column names from `## Workflow Config`. Don't guess.
-- _"Let me wait for the human to merge before starting the next ticket"_ — STOP. No auto-merge, no waiting. Ready-for-review then advance.
+- _"Let me wait for the human to merge before starting the next ticket"_ — STOP. No merge, no waiting. Ready-for-review then advance.
 - _"This is a big or irreversible call (conflicting MR, work that may already be done, a mistake I just caught) — I'll ask the user which way to go"_ — STOP. You are an **independent** orchestrator; there is no human at the terminal, and `AskUserQuestion` doesn't pause for an answer — it hangs the whole queue. Decide it from the defaults, or — if it's genuinely human-only — **skip-as-blocked / escalate** with a comment and advance. Asking is never one of your moves.
 - _"There's no board, so I can't run"_ — STOP. Board is optional. Fall back to label-only and skip card moves.
 - _"On resume I'll just re-run from implementation to be safe"_ — STOP. Read the MR comments; resume at the first phase that hasn't posted its comment.
