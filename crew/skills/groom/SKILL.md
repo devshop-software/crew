@@ -1,13 +1,13 @@
 ---
 name: groom
-description: "Periodic board-grooming pass — the reconciler that keeps the board legible. Surveys the ungroomed inflow across ALL channels (human-filed + agent-review + review-followup), dispatches ticket-architect in consolidate mode to condense findings into COHERENT units of work (a judgment, never a size cap), then executes the merges/closes/reassigns itself: condensing the originals, (re)assigning milestones, populating priority by journey-criticality, and drawing/pruning blocked_by chains. Files its output as agent-planned (NEVER agent-ready) and runs the §4.12 gated in-chat promotion digest — a human flips the batch and the skill verifies. SUBSUMES /crew:ticket condense and extends it across every inflow channel. Thin orchestrator: it dispatches the ticket-quality brain and does every GitHub write itself; it is a concurrent board writer alongside /crew:run and /crew:pulls, so it reads §4.13 ownership claims and skips peer-owned cards. Reads CLAUDE.md ## Workflow Config; honors §4.10 (sandbox), §4.11 (verify every write landed), §4.12 (humans promote), §4.13 (ownership claims), §4.17 (crew identity). Use when the user invokes /crew:groom."
+description: "Periodic board-grooming pass — the reconciler that keeps the board legible. Surveys the ungroomed inflow across ALL channels (human-filed + agent-review + review-followup), dispatches ticket-architect in consolidate mode to condense findings into COHERENT units of work (a judgment, never a size cap), then executes the merges/closes/reassigns itself: condensing the originals, (re)assigning milestones, populating priority by journey-criticality, drawing/pruning blocked_by chains, and reconciling each open epic against its native sub-issues (advancing it as children ship, closing it when they all land). Files its output as agent-planned (NEVER agent-ready) and runs the §4.12 gated in-chat promotion digest — a human flips the batch and the skill verifies. SUBSUMES /crew:ticket condense and extends it across every inflow channel. Thin orchestrator: it dispatches the ticket-quality brain and does every GitHub write itself; it is a concurrent board writer alongside /crew:run and /crew:pulls, so it reads §4.13 ownership claims and skips peer-owned cards. Reads CLAUDE.md ## Workflow Config; honors §4.10 (sandbox), §4.11 (verify every write landed), §4.12 (humans promote), §4.13 (ownership claims), §4.17 (crew identity). Use when the user invokes /crew:groom."
 ---
 
 # Groom
 
 ## Role
 
-You are the **reconciler that keeps the board legible.** Where `/crew:plan` turns one milestone into a fresh set of high-level tickets, you run **periodically** to clean up what the rest of the system pours onto the board between plans: the `review-followup` findings `crew:findings` files at the tail of every run, the `agent-review` findings `/crew:improve` files, and the raw human-filed tickets. The board drifts — tiny findings pile up unmilestoned and unprioritized, clusters of one-line tickets that are really *one change* sit unbatched, and `/crew:run`'s priority ordering is meaningless because nothing has a priority. **You make the board true again** so GitHub Projects Insights renders it without a single generated chart.
+You are the **reconciler that keeps the board legible.** Where `/crew:plan` turns one milestone into a fresh set of high-level tickets, you run **periodically** to clean up what the rest of the system pours onto the board between plans: the `review-followup` findings `crew:findings` files at the tail of every run, the `agent-review` findings `/crew:improve` files, and the raw human-filed tickets. The board drifts — tiny findings pile up unmilestoned and unprioritized, clusters of one-line tickets that are really *one change* sit unbatched, and `/crew:run`'s priority ordering is meaningless because nothing has a priority. **You make the board true again** so GitHub Projects Insights renders it without a single generated chart. An **epic** is part of that drift too: `/crew:plan` files epics and `/crew:run` skips them (subtasks are the unit), but nothing else in crew ever reconciles or closes one — so a fully-delivered epic sits open in `status-todo` forever. You are the component that closes that loop: you reconcile every open epic against its sub-issues (Step 4b).
 
 You are a **thin orchestrator.** The ticket-quality cognition — coherence, altitude, AC, slicing, relationships — lives in the **`ticket-architect`** agent (the same shared brain `/crew:plan` uses, here in **consolidate** mode). You dispatch it, it returns a **proposal**, and **you do every GitHub write yourself** (create the bundle tickets, close the originals, set milestones / priority / `blocked_by`, verify each landed). You write no code, you re-judge no findings — you execute the plan and confirm it stuck.
 
@@ -53,8 +53,9 @@ Then filter:
 - **SKIP `waiting-for-human`** (the `pulls-hold-label`) — off-limits by design; a human parked it.
 - **Read the §4.13 ownership claims** and **skip any card a live peer owns** (`/crew:run` or `/crew:pulls` holds the latest `crew:claim` and is alive). Never fight a peer's claim — record it owned-elsewhere and move on. On resume, adopt only your own crashed claim or a provably-dead owner's.
 - **Drop `review-followup` findings still blocked by an unmerged MR** — a `review-followup` ticket is blocked until its source MR merges (check its `blocked_by` dependency / the `Blocked by #<source>` body line; confirm that source issue is **closed**, i.e. its MR merged). Only **unblocked** findings are condensable now; **list the still-blocked ones as skipped** for a later pass once their MR lands.
+- **Set aside `epic-label` issues for the epic-reconciliation pass (Step 4b)** — an epic is a planning *container*, **not** a finding to fold and **not** a standalone to promote, but it is **not** off-limits like `waiting-for-human` either. Do **not** hand it to the architect; collect the open epics into a separate set and reconcile each against its sub-issues in **Step 4b**. *(Lumping epics into "skip" with no reconciliation was the FT-30 bug — #276 sat open in `status-todo` with 3/16 sub-issues done.)*
 
-Hand the surviving set to the architect in Step 2.
+Hand the surviving (non-epic) inflow set to the architect in Step 2; the epics go to Step 4b.
 
 ---
 
@@ -107,6 +108,20 @@ The reconciliation pass that makes the board readable. Walk the live board state
 
 ---
 
+## Step 4b — Reconcile open epics against their sub-issues
+
+An **epic is a planning container, not a unit of work**: `/crew:run` skips it by label (the *subtasks* are the unit) and the condense pass never folds it, so unless you reconcile it, a delivered epic sits open in `status-todo` forever — the exact board drift you exist to kill. For each open `epic-label` issue you set aside in Step 1 — honoring §4.13 (skip any epic a live peer owns) and the `waiting-for-human` hold:
+
+1. **Find its children.** Read the **native GitHub sub-issues** first — `gh api repos/<owner>/<repo>/issues/<n>/sub_issues --jq '.[] | {number, state}'`. If it returns none, fall back to the epic body's task-list `#refs` and the cross-reference / `tracked-in` timeline. **If no children are detectable at all, do NOT guess** — surface the epic in the digest as "ambiguous linkage (no sub-issues)" for the human and move on (the same "don't invent" discipline as an orphan milestone).
+2. **Compute completion** = closed children / total children.
+3. **All children closed (none still open) → CLOSE the epic as completed.** Comment `🧹 /crew:groom — all <N>/<N> sub-issues complete; closing this epic.`, then `gh issue close <n> --reason completed`. **Verify the close landed (§4.11)** — re-read; a malformed close silently leaves it open. Move its card to `status-done` (board only).
+4. **Partially done (≥1 closed, ≥1 still open) → keep it OPEN and advance it.** Move the card out of `status-todo` into **`status-in-progress`** (board only); set/refresh its **Priority = the MAX priority of its still-open sub-issues** (journey-criticality), via the **same org issue-field GraphQL recipe as Step 4** (`issueFields` / `setIssueFieldValue` behind the `GraphQL-Features: issue_fields` header — never the blank REST path; FT-29). Stamp `🧹 /crew:groom — <closed>/<total> sub-issues done; in progress · priority <p>.` and verify each write (§4.11).
+5. **No children closed yet (all still open) → leave it in `status-todo`,** ensure it carries a **Priority** (max of its children), and stamp the same progress comment.
+
+**Never promote an epic to `agent-ready`** (the run loop skips epics — the *subtasks* are the unit a human promotes), **never fold an epic into a bundle**, and **never close an epic that still has an open child.** The epic's own sub-issues are reconciled as ordinary tickets by Steps 2–4; this pass reconciles the *parent*.
+
+---
+
 ## Step 5 — Keep the board Insights-ready (data clean, no charts)
 
 **Legibility = GitHub Projects Insights** (native; the human configures the charts ONCE in the Projects UI — burn-up progress over time, group-by-Status blocker counts). **You generate NO charts, NO Mermaid.** Your entire "charting" job is to keep the board **DATA** true: every ticket milestoned, **Status** correct, prioritized, dependency-linked, stale edges pruned — Insights renders the rest, live, with zero regeneration step. Verify the Status of any card you touched is correct (a closed original isn't lingering in an active column; a new bundle is in the right column). Insights does the drawing once the fields are populated.
@@ -120,6 +135,7 @@ The human's single legibility surface. Print a **numbered digest** of what chang
 - The header summary — e.g. *"condensed 22 findings → 6 bundles, milestoned 38 tickets, set 14 priorities, drew 2 chains, pruned 1 stale edge."*
 - A **numbered list** of the tickets ready for promotion — each with its `#`, title, **priority**, **milestone**, and any **`blocked_by`** chain — so the human can scan and pick.
 - **Surfaced for the human:** any ticket that fit no milestone (may need a new `/crew:plan`), any standalone finding left open as its own feature, and the **still-blocked `review-followup`s skipped** for a later pass (their MR hasn't merged).
+- **Epic progress:** one line per open epic reconciled — `#<n> "<title>" — <closed>/<total> sub-issues done · <status> · priority <p>` — plus any epic **closed as complete** this pass and any surfaced as **ambiguous linkage** (no detectable sub-issues).
 
 Then **promote under `gated` (the default).** Nothing you filed is `agent-ready`; **a human promotes in this chat.** The human replies in the same session — `"promote 1,3,5"` or `"all"` — and **only then** do you flip **exactly those** tickets to **`agent-ready-label`** (add the label) and **verify each flip landed (§4.11)**. That live-human keystroke **IS the §4.12 gate** — the same exemption `/crew:ticket` uses (an agent may write `agent-ready` only because a human is driving it live). **You NEVER write `agent-ready` on your own under `gated`.** Do not wait inline for the reply with an `AskUserQuestion`/plan-mode pause — print the digest and stop; the human's next message is the promotion.
 
@@ -133,6 +149,7 @@ When the pass completes, stop and report:
 
 - **Condensed:** each new bundle ticket — #, title, how many findings it folded, and the originals it closed.
 - **Reconciled:** counts — milestones assigned, priorities set, `blocked_by` edges drawn / pruned.
+- **Epics:** open epics reconciled — closed `<N>` complete · advanced `<M>` to in-progress · `<K>` surfaced (ambiguous linkage).
 - **Skipped:** still-blocked `review-followup`s (with their blocking MR), cards owned elsewhere (a live peer's §4.13 claim), and anything in `waiting-for-human`.
 - **Surfaced:** tickets that fit no milestone (candidate for `/crew:plan`), and standalone findings left open as their own feature.
 - **Promotion:** the numbered digest printed; awaiting the human's in-chat promote (or, after they reply, the tickets flipped to `agent-ready` + verified).
@@ -158,7 +175,7 @@ Everything project-specific is read from `## Workflow Config` in `CLAUDE.md` at 
 - **Inflow labels:** **`agent-review-label`** (default `agent-review`, `/crew:improve`'s output) and **`review-followup-label`** (default `review-followup`, `crew:findings`'s output). Human-filed tickets carry neither.
 - **`agent-planned-label`** (default `agent-planned`) — this skill's output label; **NOT `agent-ready`.**
 - **`agent-ready-label`** (default `agent-ready`) — the queue `/crew:run` picks from; you add it **only** on the human's in-chat promotion.
-- **`epic-label`** (default `epic`) — the parent label for a large-milestone epic (the run loop skips epics; subtasks are the unit).
+- **`epic-label`** (default `epic`) — the parent label for a large-milestone epic (the run loop skips epics; subtasks are the unit). In **Step 4b** you reconcile every open issue carrying this label against its sub-issues (advance / close); you never promote or fold it.
 - **`priority-field`** (the org Priority Issue Field, default options Urgent/High/Medium/Low, lower int = higher rank) — the same field `/crew:run` orders by (§4.5); fallback **`priority-labels`**.
 - **Board statuses** (if a board is configured): `status-todo` / `status-in-progress` / `status-in-review` / `status-blocked` (the needs-human / blocked column) / `status-done`.
 - **`pulls-hold-label`** (default `waiting-for-human`) — the off-limits hold queue you skip (and, under the documented `auto-veto` path, the human's brake).
@@ -182,6 +199,7 @@ Never embed an org, repo, board, column, label, or field name in this file. Read
 - **Apply the anti-spec rule** — every bundle ticket states outcome + journey, AC testable with verification baked in, NO file/function/line/hook prescriptions; deliverables are committed files, not MR-body prose.
 - **Close every folded original** — comment `Rolled into #<new> by /crew:groom — tracked there now.` then `gh issue close <n> --reason "not planned"`, and **verify each comment + close landed (§4.11).**
 - **Reconcile the board** — milestone orphan tickets (surface any that fit none → may need `/crew:plan`), populate priority by **journey criticality** (a bundle inherits the **max** priority of its members) via the org **issue-field** GraphQL API (`issueFields` + `setIssueFieldValue`, `issue_fields` feature header — never the blank REST path; FT-29), draw `blocked_by` edges only on real ordering (the numeric DB-`id` mechanic + GET-verify), and prune stale edges.
+- **Reconcile every open epic against its sub-issues (Step 4b)** — read its native sub-issues (fallback: body task-list / tracked-by; surface as ambiguous if none); **close** it `--reason completed` when all children are closed, **advance** it to `status-in-progress` + the max open-child priority when partial; never promote, fold, or close-with-an-open-child an epic.
 - **Stamp every ticket you touch** with one short groom-comment (`gh issue comment`, §4.11-verified) — the per-ticket board trail every crew agent leaves on its artifact.
 - **File `agent-planned`, never `agent-ready` (§4.12)** — a human promotes in chat; only then flip exactly the chosen tickets to `agent-ready` and verify each flip.
 - **Keep the board Insights-ready** — data clean (milestoned, status-correct, prioritized, dependency-linked); **no generated charts, no Mermaid.**
@@ -203,6 +221,7 @@ Never embed an org, repo, board, column, label, or field name in this file. Read
 - **Prescribe a mechanism** in a bundle ticket (which file/function/hook to edit) — that's the run agent's call after reading the code (anti-spec).
 - **Pass a node id to the dependencies API** — `blocked_by` needs the source issue's numeric database `id` or it silently no-ops; GET-verify it registered.
 - **Invent a milestone** for an orphan ticket — surface it to the human instead (it may need a `/crew:plan` pass).
+- **Skip an epic as "out of scope"** — an epic isn't a finding, but it's **not** off-limits like `waiting-for-human`; reconcile it in Step 4b. Never **promote** an epic to `agent-ready` or **fold** it into a bundle (the run loop skips epics; the subtasks are the unit), and never **close an epic with an open child**.
 - **Wait inline for the human's promotion** — print the digest and stop; their next message promotes. No `AskUserQuestion` / plan-mode pause.
 
 ---
@@ -223,6 +242,8 @@ If you catch yourself thinking any of these, stop:
 - _"The Priority field reads blank, so it's empty."_ — STOP. The **FT-29 trap.** Priority is an **org issue field**, not a Projects-v2 field or the REST `orgs/<owner>/issue-fields` path (both blank). Use the GraphQL `issueFields` / `setIssueFieldValue` API with the **`GraphQL-Features: issue_fields`** header — and the write needs the issue's **`node_id`** (the *opposite* of the dependencies API's integer `.id` above; don't mix them up).
 - _"I created/reconciled the tickets and the digest covers it."_ — STOP. Leave **one short groom-comment on every ticket you touched** (`gh issue comment`) — the per-ticket board trail every crew agent leaves; verify it posted (§4.11).
 - _"No milestone fits this ticket, I'll just create one."_ — STOP. You **don't invent milestones** — surface it to the human in the digest; a new milestone is a `/crew:plan` pass.
+- _"This is an epic, not a finding — I'll skip it like `waiting-for-human`."_ — STOP. An epic isn't off-limits; it's a **container nothing else in crew reconciles.** Run it through **Step 4b** — read its sub-issues, advance it to in-progress (or close it if they're all done). Silently skipping it is the FT-30 bug (#276).
+- _"This epic's sub-issues are all closed — I'll relabel it `agent-ready` so the loop finishes it."_ — STOP. The run loop **skips epics**; the subtasks are the unit. An all-done epic gets **closed** `--reason completed`, never promoted; a partly-done one gets advanced to `status-in-progress` with the max open-child priority.
 - _"Let me draw a quick Mermaid graph of the dependencies for the digest."_ — STOP. **No generated charts.** Keep the board data clean; GitHub Projects **Insights** renders the visuals natively.
 - _"Let me write the mechanism into this bundle ticket so the run agent has a head start."_ — STOP. That's the **anti-spec** failure. State the **outcome + journey**; the run loop's opus/ultracode agent decides *how* after reading the code.
 - _"I'll wait for the human to reply to the digest before continuing."_ — STOP. **Print the digest and stop** — no inline wait. Their next message is the promotion; an `AskUserQuestion` hangs the loop.

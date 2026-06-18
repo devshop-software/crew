@@ -86,7 +86,7 @@ Hand the **narrative + the distilled journey map** to the shared `ticket-archite
 - **Slices along DISJOINT surfaces** (files / journeys) so parallel `/crew:run` agents work in isolation and don't collide. Each slice is **atomic (§4.7)** — one shippable unit a single run can clear.
 - **Proposed `blocked_by` chains ONLY where real ordering exists** — non-blocking is the default; the default sibling edge count is **zero**. The architect must **justify each** edge it draws (B literally cannot start until A merges).
 - **Proposed priority** per ticket — default rank = **journey criticality** (core flow > edge case > polish), **NOT file size**.
-- **Epic-vs-flat per its judgment:** a large milestone → one `epic`-labeled parent + the real work on `agent-ready`-eligible sub-issues (the run loop skips epics; subtasks are the unit); a small milestone → a flat, milestone-tagged set.
+- **Epic-vs-flat per its judgment:** a large milestone → one `epic`-labeled parent + the real work on `agent-ready`-eligible sub-issues (the run loop skips epics; subtasks are the unit); a small milestone → a flat, milestone-tagged set. The parent↔sub-issue links are written by the orchestrator in Step 5 (native GitHub sub-issues), so the epic has a computable completion state for `/crew:groom` to reconcile and eventually close (its Step 4b).
 
 ---
 
@@ -94,7 +94,7 @@ Hand the **narrative + the distilled journey map** to the shared `ticket-archite
 
 **Agent decides, orchestrator writes.** Execute the architect's proposal as GitHub writes, re-reading each to confirm it landed (`gh` writes silently no-op):
 
-1. **Create each issue** with the **`agent-planned-label`** — **NOT** `agent-ready`. (`gh issue create --title … --body-file <tmp> --label <agent-planned-label>`; ensure the label exists idempotently first.) Capture each new issue number. Epic parent gets the `epic-label`.
+1. **Create each issue** with the **`agent-planned-label`** — **NOT** `agent-ready`. (`gh issue create --title … --body-file <tmp> --label <agent-planned-label>`; ensure the label exists idempotently first.) Capture each new issue number. Epic parent gets the `epic-label`. **When the architect proposed an epic + sub-issues, establish the native sub-issue link** so `/crew:groom` can later reconcile the epic against its children (groom's Step 4b): for each child, `CHILD_ID=$(gh api repos/<owner>/<repo>/issues/<child> --jq .id)` (the **integer DB `id`** — like the dependencies API, *not* the node-id) then `gh api --method POST repos/<owner>/<repo>/issues/<epic>/sub_issues -F sub_issue_id="$CHILD_ID"`, and **GET `…/issues/<epic>/sub_issues` to verify each child registered (§4.11)**. A bare `epic`-labeled parent with no linked children has no computable completion state and can never be auto-closed.
 2. **Assign the milestone:** `gh issue edit <n> --milestone "<title>"` for every ticket; re-read to verify the milestone landed.
 3. **Set the `blocked_by` chains** with the integer-DB-id mechanic (reused wholesale from `crew:findings`; a node-id silently no-ops):
    - `SRC_ID=$(gh api repos/<owner>/<repo>/issues/<A> --jq .id)` — the **integer DB `id`**, not the node-id.
@@ -159,7 +159,7 @@ Everything project-specific is read from `## Workflow Config` in `CLAUDE.md` at 
 
 - **`agent-planned-label`** (default `agent-planned`) — what this skill files tickets as; NOT `agent-ready`.
 - **`agent-ready-label`** (default `agent-ready`) — what the human promotes to in chat.
-- **`epic-label`** (default `epic`) — the parent label for a large milestone.
+- **`epic-label`** (default `epic`) — the parent label for a large milestone; the orchestrator also links its sub-issues natively (Step 5) so `/crew:groom` can reconcile and close it.
 - **`planning-narrative`** (default `wiki`; `wiki` | `none`) — where the human narrative + the AI journey-map pages live.
 - **`planning-promotion`** (default `gated`; opt-in `auto-veto`) — the promotion mode.
 - **`priority-field`** (the org Priority Issue Field; fallback **`priority-labels`**) — the field `/crew:run` orders by (§4.5).
@@ -184,6 +184,7 @@ Never embed an org, repo, board, column, label, field, or tool name in this file
 - **Keep tickets at user-journey altitude** — outcome + journey + testable AC with verification baked in; **NO file/function/line/hook prescriptions** (the anti-spec rule; the run loop's opus/ultracode agents decide _how_).
 - **Slice along disjoint surfaces, non-blocking by DEFAULT** — sibling edge count is zero; draw a `blocked_by` edge only on a real ordering, and justify each.
 - **Set dependencies by the integer DB `id` mechanic** (`gh api … --jq .id` → POST `…/dependencies/blocked_by`), then **GET to verify it landed (§4.11)** — a node-id silently no-ops.
+- **Link an epic's sub-issues natively** — when the architect proposes an epic, POST each child to the parent's `…/sub_issues` by its **integer DB `id`** and GET-verify (§4.11), so `/crew:groom` can later reconcile the epic against its children and close it when they all land.
 - **Populate Priority** via the org **issue-field** GraphQL API (`issueFields` read + `setIssueFieldValue` write, behind the `GraphQL-Features: issue_fields` header — never the blank REST path; FT-29), ranked by **journey criticality** not file size; the same field `/crew:run` orders by (§4.5). Fallback `priority-labels` only if the org has no issue field.
 - **Stamp each created ticket with one short provenance comment** (`gh issue comment`, §4.11-verified) — the per-ticket board trail every crew agent leaves on its artifact.
 - **File `agent-planned`, never `agent-ready`** — print a numbered digest; the **human promotes in chat**; flip ONLY those to `agent-ready` + verify. Under gated, the skill never writes `agent-ready` on its own.
@@ -225,3 +226,4 @@ If you catch yourself thinking any of these, stop:
 - _"I created the tickets and the digest lists them, so I'm done."_ — STOP. Leave **one short provenance comment on each created ticket** too (`gh issue comment`) — the per-ticket board trail every crew agent leaves; verify it posted (§4.11).
 - _"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."_ — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop (§4.17)**, not a fallback to the human. Only an *absent* block runs as the user.
 - _"There's a live `/crew:run` or `/crew:groom` on one of these issues, but I'll write it anyway."_ — STOP. Check the §4.13 claim. A live peer owns it → skip it; never co-write a card a peer holds.
+- _"I filed the epic and its sub-issues, so the epic is wired up."_ — STOP. A bare `epic`-labeled parent has **no computable completion state.** Establish the **native sub-issue link** (POST each child by its integer DB `id` to the parent's `…/sub_issues`, GET-verify) so `/crew:groom` can reconcile and eventually close it. Without it, the epic sits open forever (the FT-30 failure class).
