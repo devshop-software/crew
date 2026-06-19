@@ -1,0 +1,17 @@
+{
+  "name": "crew-dev",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local dev tooling for the crew plugin — renders the plugin's skills/agents to HTML and serves a browseable index. NOT part of the shipped plugin (the plugin is ./crew).",
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node dev/build.mjs",
+    "watch": "node dev/watch.mjs",
+    "serve": "node dev/serve.mjs",
+    "dev": "node dev/dev.mjs"
+  }
+}

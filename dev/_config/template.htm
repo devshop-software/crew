@@ -1,0 +1,382 @@
+<!doctype html>
+<!--
+  Crew skill — HTML shell. Filled by render.mjs (NOT by hand, NOT by an agent).
+  Placeholders (each wrapped in double curly braces): title, description, type,
+  body. The whole page is produced deterministically from a SKILL.md, so this
+  file is the only place the look-and-feel lives; edit the CSS here and re-run
+  render.mjs to restyle. Style: International Typographic Style (Swiss Modernism).
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="{{descriptionText}}" />
+  <title>{{title}}</title>
+  <style>
+    /* ── Swiss Modernism tokens: paper-white, black ink, one red accent ─── */
+    :root {
+      --paper: #ffffff;
+      --ink: #111111;
+      --muted: #6b6b6b;
+      --red: #e2231a;
+      --rule: #111111;
+      --rule-soft: #d9d9d9;
+      --wash: #f4f4f4;
+      --code-bg: #f5f5f5;
+      --code-fg: #111111;
+      --code-bar: #ebebeb;
+      --content: 880px;
+      --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+      --sans: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #0d0d0d;
+        --ink: #f2f2f2;
+        --muted: #9b9b9b;
+        --red: #ff3b30;
+        --rule: #f2f2f2;
+        --rule-soft: #2a2a2a;
+        --wash: #161616;
+        --code-bg: #161616;
+        --code-fg: #f2f2f2;
+        --code-bar: #1f1f1f;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    .page {
+      max-width: var(--content);
+      margin: 0 auto;
+      padding: 64px 28px 120px;
+    }
+
+    /* ── header (from frontmatter) ─────────────────────────────────── */
+    .skill-header { margin-bottom: 8px; }
+    /* frontmatter readout (rendered from the SKILL.md YAML, nesting preserved) */
+    .skill-frontmatter {
+      margin: 0 0 6px;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      line-height: 1.7;
+    }
+    .skill-frontmatter .fm { list-style: none; margin: 0; padding: 0; }
+    .skill-frontmatter .fm .fm { margin: 1px 0 1px 0.85em; padding-left: 0.85em; border-left: 1px solid var(--rule-soft); }
+    .skill-frontmatter .fm__row { margin: 0; }
+    .skill-frontmatter .fm__key { color: var(--red); font-weight: 700; }
+    .skill-frontmatter .fm__key::after { content: ":"; color: var(--muted); margin-right: 0.5ch; }
+    .skill-frontmatter .fm__val { color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+    .skill-header__title {
+      font-size: clamp(2.6rem, 7vw, 4.2rem);
+      line-height: 0.95;
+      font-weight: 700;
+      margin: 20px 0 0;
+      letter-spacing: -0.04em;
+    }
+    .skill-header__lead {
+      margin: 18px 0 0;
+      font-size: 1.1rem;
+      line-height: 1.5;
+      color: var(--muted);
+      max-width: 64ch;
+    }
+    .skill-header__rule {
+      margin: 28px 0 8px;
+      border: 0;
+      border-top: 4px solid var(--rule);
+    }
+
+    /* ── headings ──────────────────────────────────────────────────── */
+    .skill-body h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin: 2.6em 0 0.7em;
+      padding-bottom: 0.3em;
+      border-bottom: 1px solid var(--rule);
+      letter-spacing: -0.015em;
+      scroll-margin-top: 20px;
+    }
+    .skill-body h3 {
+      font-size: 1.14rem;
+      font-weight: 700;
+      margin: 2em 0 0.55em;
+      letter-spacing: -0.01em;
+      scroll-margin-top: 20px;
+    }
+    .skill-body h4, .skill-body h5, .skill-body h6 {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin: 1.7em 0 0.5em;
+      color: var(--muted);
+    }
+    .skill-body h2:first-child, .skill-body h3:first-child { margin-top: 0; }
+
+    /* ── prose ─────────────────────────────────────────────────────── */
+    .skill-body p { margin: 0.9em 0; }
+    .skill-body a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--red); padding-bottom: 1px; }
+    .skill-body a:hover { color: var(--red); }
+    .skill-body strong { font-weight: 700; }
+    .skill-body del { color: var(--muted); }
+
+    .skill-body ul, .skill-body ol { margin: 0.8em 0; padding-left: 1.4em; }
+    .skill-body li { margin: 0.32em 0; }
+    .skill-body li > ul, .skill-body li > ol { margin: 0.3em 0; }
+
+    .skill-body hr {
+      margin: 2.4em 0;
+      border: 0;
+      border-top: 1px solid var(--rule-soft);
+    }
+
+    .skill-body blockquote {
+      margin: 1.1em 0;
+      padding: 0.2em 1.1em;
+      border-left: 3px solid var(--red);
+      color: var(--muted);
+    }
+
+    /* ── inline code ───────────────────────────────────────────────── */
+    .skill-body :not(pre) > code {
+      font-family: var(--mono);
+      font-size: 0.86em;
+      background: var(--wash);
+      color: var(--ink);
+      padding: 0.12em 0.38em;
+      border: 1px solid var(--rule-soft);
+      word-break: break-word;
+    }
+
+    /* ── table component ───────────────────────────────────────────── */
+    .md-table-wrap {
+      margin: 1.4em 0;
+      overflow-x: auto;
+      border: 1px solid var(--rule);
+      background: var(--paper);
+    }
+    .md-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+    .md-table th, .md-table td {
+      text-align: left;
+      padding: 11px 15px;
+      border-bottom: 1px solid var(--rule-soft);
+      border-right: 1px solid var(--rule-soft);
+      vertical-align: top;
+    }
+    .md-table th:last-child, .md-table td:last-child { border-right: 0; }
+    .md-table thead th {
+      background: var(--wash);
+      font-weight: 700;
+      font-size: 0.66rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink);
+      white-space: nowrap;
+      border-bottom: 2px solid var(--rule);
+    }
+    .md-table tbody tr:last-child td { border-bottom: 0; }
+    .md-table td > code, .md-table th > code { white-space: nowrap; }
+
+    /* ── code-block component ──────────────────────────────────────── */
+    .md-code {
+      margin: 1.5em 0;
+      border: 1px solid var(--rule);
+      background: var(--code-bg);
+    }
+    .md-code__bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: var(--code-bar);
+      border-bottom: 1px solid var(--rule);
+    }
+    .md-code__lang {
+      font-family: var(--mono);
+      font-size: 0.66rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .md-code__copy {
+      font-family: var(--sans);
+      font-size: 0.66rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--ink);
+      background: transparent;
+      border: 1px solid var(--rule);
+      padding: 3px 10px;
+      cursor: pointer;
+      transition: color .12s, background-color .12s;
+    }
+    .md-code__copy:hover { background: var(--ink); color: var(--paper); }
+    .md-code pre {
+      margin: 0;
+      padding: 16px 18px;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 0.84rem;
+      line-height: 1.6;
+      color: var(--code-fg);
+      -webkit-text-size-adjust: 100%;
+      tab-size: 2;
+    }
+    .md-code pre code { font: inherit; color: inherit; background: none; padding: 0; border: 0; }
+
+    /* ── sections + per-H2 note ────────────────────────────────────── */
+    .skill-section { margin: 0; }
+    .skill-section + .skill-section { margin-top: 0.5em; }
+    .section-desc {
+      margin: -0.1em 0 1.4em;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.5;
+      max-width: 68ch;
+    }
+
+    /* last section (Constraints) renders like any other section — no card */
+    .skill-section--feature {
+      margin-top: 2.6em;
+    }
+
+    /* ── steps as accordions ───────────────────────────────────────── */
+    .step {
+      border: 1px solid var(--rule);
+      background: var(--paper);
+      margin: 0.5em 0;
+    }
+    .step__summary {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 13px 16px;
+      cursor: pointer;
+      font-weight: 700;
+      list-style: none;
+      user-select: none;
+    }
+    .step__summary::-webkit-details-marker { display: none; }
+    .step__summary:hover { background: var(--wash); }
+    .step__num {
+      flex: none;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--red);
+      min-width: 1.6em;
+    }
+    .step__title { flex: 1; }
+    .step__summary::after {
+      content: "";
+      flex: none;
+      width: 8px; height: 8px;
+      border-right: 2px solid var(--muted);
+      border-bottom: 2px solid var(--muted);
+      transform: rotate(-45deg);
+      transition: transform .2s ease;
+    }
+    .step[open] .step__summary::after { transform: rotate(45deg); }
+    .step__body {
+      padding: 4px 18px 16px;
+      border-top: 1px solid var(--rule-soft);
+    }
+    .step__body > :first-child { margin-top: 0.9em; }
+
+    /* ── callouts (Do / Don't / Red flags) — black / white / red ────── */
+    .callout {
+      margin: 1.3em 0;
+      border: 1px solid var(--rule);
+      border-left-width: 4px;
+      padding: 0 18px 14px;
+    }
+    .callout__head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 14px 0 4px;
+      font-weight: 700;
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .callout__icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px; height: 20px;
+      font-size: 0.8rem;
+      color: var(--paper);
+    }
+    .callout__body > :first-child { margin-top: 0.3em; }
+    .callout__body ul { padding-left: 1.3em; }
+    .callout--do { border-left-color: var(--ink); }
+    .callout--do .callout__head { color: var(--ink); }
+    .callout--do .callout__icon { background: var(--ink); }
+    .callout--dont { border-left-color: var(--red); }
+    .callout--dont .callout__head { color: var(--red); }
+    .callout--dont .callout__icon { background: var(--red); }
+    .callout--flags { border-left-color: var(--red); }
+    .callout--flags .callout__head { color: var(--ink); }
+    .callout--flags .callout__icon { background: var(--red); }
+    .callout--flags li { margin: 0.5em 0; }
+    .callout--flags em { color: var(--ink); font-style: italic; }
+    .flag-stop {
+      font-weight: 700;
+      color: var(--red);
+      letter-spacing: 0.04em;
+    }
+
+    @media (max-width: 560px) {
+      .page { padding: 40px 18px 90px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="skill-header">
+      {{frontmatter}}
+      <h1 class="skill-header__title">{{title}}</h1>
+      <p class="skill-header__lead">{{description}}</p>
+      <hr class="skill-header__rule" />
+    </header>
+
+    <article class="skill-body">
+{{body}}
+    </article>
+  </main>
+
+  <script>
+    document.querySelectorAll('.md-code__copy').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var code = btn.closest('.md-code').querySelector('code').innerText;
+        if (!navigator.clipboard) return;
+        navigator.clipboard.writeText(code).then(function () {
+          var prev = btn.textContent;
+          btn.textContent = 'Copied';
+          setTimeout(function () { btn.textContent = prev; }, 1200);
+        });
+      });
+    });
+  </script>
+</body>
+</html>
