@@ -34,16 +34,16 @@ Establish the environment before touching any MR — auth, repo, config, this ru
 
 1. **GitHub auth:** `gh auth status`. If not logged in, stop: "Not authenticated. Run `gh auth login`, then re-invoke `/crew:pulls`."
 2. **Resolve the repo:** `gh repo view --json nameWithOwner -q .nameWithOwner`. Capture `<owner>/<repo>`. If it fails (no default remote / ambiguous remotes), stop and tell the user to run `gh repo set-default`.
-3. **Read `## Workflow Config`** from `CLAUDE.md` (walk upward from CWD), capturing the keys listed in **## Workflow Config** below. If there is no `## Workflow Config`, stop: "No `## Workflow Config` found. Run `/crew:adjust`."
+3. **Read `.crew.rc`** (walk upward from CWD to the repo root), capturing from its `config` object the keys listed in **## Workflow Configuration** below. If there is no `.crew.rc`, stop: "No `.crew.rc` found. Run `/crew:adjust`."
 4. **Establish this run's identity (§4.13).** Set `RUN_ID = <host>:<pid>:<start-epoch>` — `hostname`, this orchestrator's own Claude process PID (e.g. `ps -o ppid= -p $$` resolves the Claude process owning the shell), and the current epoch; you stamp it on every MR you claim so a parallel `/crew:run` or `/crew:pulls` can tell your in-flight work from its own, and hold it for the whole run.
-5. **Crew identity (§4.17, if configured).** Before any GitHub or git write, check `## Workflow Config` for a `crew-identity` block; if present, act as the crew bot — run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` (it mints/refreshes a cached 1-hour installation token, so re-run it before a write if the phase has run long — idempotent), set `git config user.name`/`user.email` to the block's bot author **in the worktree** so commits show the bot, push over HTTPS as the token, and confirm a write is bot-attributed before reporting done (§4.11); if there is no block, use the ambient `gh`/git login (default, unchanged). The bot is the merge author and the question-answerer — so its own comments and threads are agent-authored and never self-block.
+5. **Crew identity (§4.17, if configured).** Before any GitHub or git write, check `.crew.rc`'s `config` for a `crew-identity` block; if present, act as the crew bot — run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` (it mints/refreshes a cached 1-hour installation token, so re-run it before a write if the phase has run long — idempotent), set `git config user.name`/`user.email` to the block's bot author **in the worktree** so commits show the bot, push over HTTPS as the token, and confirm a write is bot-attributed before reporting done (§4.11); if there is no block, use the ambient `gh`/git login (default, unchanged). The bot is the merge author and the question-answerer — so its own comments and threads are agent-authored and never self-block.
 6. **Sandbox stays ON (§4.10)** for the whole run.
 
 > If no board is configured, the loop runs **label-only**: there are no card moves; everywhere below that says "move the card", silently skip it. The triage tracking issue and the comment-driven control surface still work.
 
 You will not:
 
-- Start the loop on a project with no `## Workflow Config` — stop and tell the user to run `/crew:adjust`.
+- Start the loop on a project with no `.crew.rc` — stop and tell the user to run `/crew:adjust`.
 - Fall back to the human identity when a present `crew-identity` block's helper can't mint a token — that is a hard-stop (§4.17).
 - Disable the sandbox at any point (§4.10) — `dangerouslyDisableSandbox`, `rm -rf`, and `git worktree remove --force` all trip the sandbox's own approval prompt and stall the run even under skip-permissions.
 
@@ -120,7 +120,7 @@ EITHER release clears the park, re-checked every sweep; when a park's block is c
 PARK applies a consistent set of moves and then continues the loop.
 
 - Move the card → the **needs-human / parked** column (board only).
-- Apply the **hold label** read from `## Workflow Config` key `pulls-hold-label` (default `waiting-for-human`).
+- Apply the **hold label** read from `.crew.rc` key `pulls-hold-label` (default `waiting-for-human`).
 - Post **ONE deduped** park comment carrying the reason **and** the release instruction — e.g. "To release: resolve the thread, or remove the `<pulls-hold-label>` label."
 - **CONTINUE the loop** (go to Step 2).
 
@@ -220,7 +220,7 @@ The sweep just merged a series of MRs into `main`, so confirm `main` is actually
 
 1. **Fresh-fetch `origin/<base-branch>` (§4.15).**
 2. **Bring up an ISOLATED stack** (§4.8): run-derived ports / data namespaces, `fuser -k <port>/tcp` teardown; at steady state only your stack is up.
-3. **Run the full gate** from `## Workflow Config`: lint / format / unit / e2e.
+3. **Run the full gate** from `.crew.rc`: lint / format / unit / e2e.
    - **main green →** healed; tear down the stack (§4.8) and proceed to **Phase 12**.
    - **main broken →** **dispatch a fix in a SEPARATE MR** (`crew:implementation`, with `crew:qa` for tests), run the **full gate** on that MR, then **merge it by the SAME default-unless-vetoed rule** as the main loop — it is itself **vetoable by a human comment / unresolved thread** (Steps 4–8 apply); **re-confirm main green** before declaring healed.
    - **CI can't run (detected outage) →** **WAIT / flag**; re-confirm green only against a real run.
@@ -273,7 +273,7 @@ Each prompt carries:
 
 - the working directory;
 - the MR/issue numbers;
-- the relevant `## Workflow Config` values;
+- the relevant `.crew.rc` values;
 - the orchestrator-owned round counters (for fix-mode dispatches);
 - the running stack's base URL (for qa).
 
@@ -308,9 +308,9 @@ When the per-MR loop ends and main is healed, stop and report. Then stop — don
 
 ---
 
-## Workflow Config
+## Workflow Configuration
 
-Everything project-specific is read from `## Workflow Config` in `CLAUDE.md` at runtime — origin-agnostic, never hardcoded. Keys this skill reads:
+Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispatch and act on its `config` values — this is the at-a-glance reference for the keys this loop reads; never hardcode them. Keys this skill reads:
 
 - **Board** status names (In progress, In review, `status-done`, the needs-human / parked column) — *if a board is configured.*
 - **`merge-method`** (default `squash`), **base branch**, **branch convention**.
@@ -348,7 +348,7 @@ The hard boundaries on every run.
 - **Clean up non-forced (§4.10)** — `git worktree remove` + `prune` + reclaim merged/closed orphan trees no peer owns; leave-and-log the stubborn ones.
 - **Keep the sandbox on (§4.10)** the whole run; **verify every GitHub write landed (§4.11).**
 - **Act under the crew identity when configured (§4.17)** — mint `GH_TOKEN` via the token-helper, set the bot git author, verify writes are bot-attributed; **hard-stop if the helper fails — never fall back to the human.** No block → ambient login.
-- Read everything project-specific from `## Workflow Config`; run **board-aware**, falling back to label-only when `board: none`.
+- Read everything project-specific from `.crew.rc`; run **board-aware**, falling back to label-only when `board: none`.
 
 ### DON'T:
 

@@ -3,7 +3,7 @@
 #
 # Ships with the crew plugin; /crew:adjust installs a copy to ~/.config/crew/ and
 # tests it. Project-agnostic — all values come from the environment (set from the
-# `crew-identity` block in CLAUDE.md ## Workflow Config):
+# `crew-identity` block in .crew.rc `config`):
 #   CREW_APP_ID                 GitHub App ID (JWT issuer)
 #   CREW_INSTALLATION_ID        installation ID for the target org/repos
 #   CREW_APP_PRIVATE_KEY_PATH   path to the App private key (.pem), outside any repo

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/crew/crew.schema.json",
+  "title": "crew workflow configuration (.crew.rc)",
+  "description": "Schema for a project's .crew.rc — the crew workflow configuration written by /crew:adjust and read at runtime by /crew:run, /crew:pulls, and every dispatched agent. Pair this file with `.crew.rc` (\"$schema\": \"./.crew.schema.json\") for editor linting and autocomplete.",
+  "type": "object",
+  "required": ["config"],
+  "additionalProperties": true,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Path to this schema, enabling editor linting. Defaults to ./.crew.schema.json (the copy /crew:adjust places at the repo root)."
+    },
+    "config": {
+      "type": "object",
+      "description": "Every project-specific value the crew loop and its agents act on. `none` (string) marks anything the project genuinely lacks.",
+      "additionalProperties": false,
+      "properties": {
+        "repo": { "type": "string", "description": "The GitHub <owner>/<repo> the loop drives." },
+
+        "test-cmd": { "type": "string", "description": "Unit/integration test command, or `none`." },
+        "lint-cmd": { "type": "string", "description": "Lint command, or `none`." },
+        "build-cmd": { "type": "string", "description": "Build / typecheck command, or `none`." },
+        "e2e-cmd": { "type": "string", "description": "End-to-end test command, or `none`." },
+        "format-cmd": { "type": "string", "description": "Formatter command used when healing main, or `none`." },
+        "e2e-framework": { "type": "string", "description": "Detected e2e framework (e.g. playwright / cypress / pytest), or `none`." },
+
+        "agent-ready-label": { "type": "string", "description": "The label /crew:run filters open issues on — the queue and kill switch (default agent-ready)." },
+        "review-followup-label": { "type": "string", "description": "The label crew:findings files advisory follow-ups under (default review-followup)." },
+        "findings-assignee": { "type": "string", "description": "GitHub user crew:findings assigns filed follow-ups to, or `none`." },
+        "mr-reviewer": { "type": "string", "description": "GitHub user /crew:run requests as reviewer on each finished MR, or `none`." },
+        "pulls-triage-label": { "type": "string", "description": "Label on /crew:pulls' per-run triage tracking issue (default pulls-triage)." },
+        "pulls-hold-label": { "type": "string", "description": "Hold label /crew:pulls applies on park; removing it releases the park (default waiting-for-human)." },
+
+        "board": { "type": "string", "description": "GitHub Projects-v2 project number/URL, or `none` for label-only mode." },
+        "priority-field": { "type": "string", "description": "Org-level Priority issue field name the loop ranks by (default Priority), or `none`." },
+        "priority-field-id": { "type": "string", "description": "The Priority issue-field node id (IFSS_…) so /crew:run skips re-resolving it, or `none`." },
+        "priority-labels": { "type": "string", "description": "Comma-separated priority:* label fallback (e.g. high,medium,low) when no issue field exists, or `none`." },
+        "status-todo": { "type": "string", "description": "Board column the loop selects the next ticket from (default TODO)." },
+        "status-in-progress": { "type": "string", "description": "Board column the loop moves a ticket it is working into (default In progress)." },
+        "status-in-review": { "type": "string", "description": "Board column a finished MR is parked in (default In review)." },
+        "status-blocked": { "type": "string", "description": "Needs-human / blocked board column for escalations (default Blocked)." },
+        "status-done": { "type": "string", "description": "Board column /crew:pulls moves a card to after merge (default Done)." },
+
+        "branch-convention": { "type": "string", "description": "Per-ticket branch name pattern (default crew/<issue#>-<slug>)." },
+        "base-branch": { "type": "string", "description": "Branch worktrees fork from and MRs target (e.g. main)." },
+        "merge-method": { "type": "string", "enum": ["squash", "merge", "rebase"], "description": "How /crew:pulls lands an MR (default squash)." },
+        "worktree-layout": { "type": "string", "enum": ["bare-clone", "standard"], "description": "bare-clone (fork off .bare/) or standard (fork off the existing checkout)." },
+
+        "start-cmd": { "type": "string", "description": "Command that brings the app stack up, or `none`." },
+        "readiness-check": { "type": "string", "description": "Health URL / port / log pattern signalling the stack is up, or `none`." },
+        "port": { "type": "string", "description": "The app's base port, or `none`." },
+        "isolation-scheme": { "type": "string", "description": "Issue-derived port / data-namespace recipe evaluated per ticket, or `none`." },
+
+        "crew-identity": {
+          "type": "object",
+          "description": "Optional dedicated GitHub App bot identity (§4.17). Present → every component acts as the bot; omit the whole object to run as the ambient user.",
+          "additionalProperties": false,
+          "properties": {
+            "identity-mode": { "type": "string", "enum": ["github-app", "user"], "description": "github-app to act as the bot; user (or omit this object) for the ambient login." },
+            "app-id": { "type": "string", "description": "GitHub App ID (JWT issuer)." },
+            "installation-id": { "type": "string", "description": "Installation ID for the target org/repos." },
+            "private-key-path": { "type": "string", "description": "Path to the App private key (.pem), per machine and outside any repo." },
+            "token-helper": { "type": "string", "description": "Path to the installed gh-token.sh helper that mints the installation token." },
+            "git-author-name": { "type": "string", "description": "Bot git author name, e.g. <slug>[bot]." },
+            "git-author-email": { "type": "string", "description": "Bot git author email, e.g. <bot-user-id>+<slug>[bot]@users.noreply.github.com." }
+          }
+        }
+      }
+    }
+  }
+}

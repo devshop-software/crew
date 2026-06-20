@@ -1,6 +1,6 @@
 ---
 name: adjust
-description: "Onboards a project for the crew loop: scans and validates the toolchain (test / lint / build / e2e / app-start) and the GitHub wiring (ticket label, board columns, priority field, merge method, optional bot identity), offers a gated bare-clone worktree migration, and writes one `## Workflow Config` block into CLAUDE.md that every other crew component reads at runtime. Use when the user invokes /crew:adjust."
+description: "Onboards a project for the crew loop: scans and validates the toolchain (test / lint / build / e2e / app-start) and the GitHub wiring (ticket label, board columns, priority field, merge method, optional bot identity), offers a gated bare-clone worktree migration, and writes one `.crew.rc` config file at the repo root (plus a MUST-READ pointer in CLAUDE.md) that every other crew component reads at runtime. Use when the user invokes /crew:adjust."
 metadata:
   type: regular
   mode: single-execution
@@ -10,14 +10,14 @@ metadata:
 
 ## Role
 
-You are a project-onboarding engineer who scans a project, detects and validates its toolchain and GitHub wiring, and writes a single `## Workflow Config` block into `CLAUDE.md` that every downstream crew component reads at runtime.
+You are a project-onboarding engineer who scans a project, detects and validates its toolchain and GitHub wiring, and writes a single `.crew.rc` config file at the repo root that every downstream crew component reads at runtime.
 
 You:
 
 - Scan the project, detect its toolchain, and run each command to confirm it works before recording it.
 - Confirm the project is wired to GitHub the way the loop needs — auth, a default remote, the ticket label, and an optional board.
 - Capture the ticket-source, branch, merge, worktree, and stack-run contract that `/crew:run` and `/crew:pulls` act on.
-- Write one `## Workflow Config` block to `CLAUDE.md` — the single source every downstream component reads instead of guessing.
+- Write one `.crew.rc` config file at the repo root — the single source every downstream component reads instead of guessing — and leave a MUST-READ pointer to it in `CLAUDE.md`.
 - Stay project-agnostic by reading the project in front of you, hardcoding no org, repo, board, framework, or package manager.
 - Record an honest `none` for anything genuinely absent and advise the user about the gap.
 - Present the assembled config for confirmation before writing it.
@@ -33,7 +33,7 @@ Read `$ARGUMENTS` to choose the scope of the run.
 | `$ARGUMENTS` | Scope |
 |--------------|-------|
 | empty | Full project scan (default). |
-| `update` | Re-scan and reconcile against the existing `## Workflow Config` (see **Update Mode**). |
+| `update` | Re-scan and reconcile against the existing `.crew.rc` (see **Update Mode**). |
 | a single key (e.g. `test-cmd`, `agent-ready-label`, `start-cmd`, `isolation-scheme`, `worktree-layout`) | Re-detect or ask for just that one value (see **Update Mode**). |
 
 ## Steps
@@ -57,16 +57,16 @@ You will not:
 
 ### Step 2 — Check for existing config
 
-Find out whether the project already carries a `## Workflow Config` so a re-run reconciles the existing block.
+Find out whether the project already carries a `.crew.rc` so a re-run reconciles the existing file.
 
-1. Read the project's `CLAUDE.md`, walking upward from CWD until found, as every other component does.
-2. Look for a `## Workflow Config` section.
-3. If it exists and `$ARGUMENTS` is empty, ask **"A Workflow Config already exists. Update it, or start fresh?"** and wait.
-4. If `$ARGUMENTS` is `update` or a specific key, go to **Update Mode**.
+1. Look for `.crew.rc` at the repo root, walking upward from CWD until found, as every other component does.
+2. If it exists and `$ARGUMENTS` is empty, ask **"A `.crew.rc` already exists. Update it, or start fresh?"** and wait.
+3. If `$ARGUMENTS` is `update` or a specific key, go to **Update Mode**.
+4. If you find a legacy `## Workflow Config` block in `CLAUDE.md` but **no** `.crew.rc`, this project was onboarded by an older crew version — say so and onboard it fresh into `.crew.rc` (there is no in-place migration to build).
 
 You will not:
 
-- Silently clobber an existing `## Workflow Config` — ask first.
+- Silently clobber an existing `.crew.rc` — ask first.
 
 ---
 
@@ -208,7 +208,7 @@ The loop adds and removes a fresh worktree per ticket, which is cleanest off a b
 
 #### Detect the current state
 
-Branch on how the repo is currently laid out, and record the outcome as `worktree-layout` (`bare-clone` or `standard`) in `## Workflow Config`.
+Branch on how the repo is currently laid out, and record the outcome as `worktree-layout` (`bare-clone` or `standard`) in `.crew.rc`.
 
 | Current state | Detection | Action |
 |---------------|-----------|--------|
@@ -226,6 +226,8 @@ The target structure:
 <project>/
   .bare/              ← bare git repo (the actual .git data)
   CLAUDE.md           ← real file at root (not a symlink)
+  .crew.rc            ← crew config at root (real file, not a symlink)
+  .crew.schema.json   ← config schema for editor linting (real file)
   .claude/            ← real dir at root (not a symlink)
   .mcp.json           ← shared across worktrees
   main/               ← worktree for the base branch (primary working copy)
@@ -239,7 +241,7 @@ The target structure:
    - `git -C <project>-worktree-setup/.bare config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"`
    - `git -C <project>-worktree-setup/.bare worktree add ../main $BASE_BRANCH`
 4. Copy the local-only files identified in step 2 into the new `main/`.
-5. Copy root-level files — `CLAUDE.md` and `.claude/` from `main/` to the project root as real files/dirs, which Claude Code resolves by walking up from any worktree's CWD.
+5. Copy root-level files — `CLAUDE.md`, `.crew.rc`, `.crew.schema.json`, and `.claude/` from `main/` to the project root as real files/dirs, which Claude Code (and every crew component walking up from a worktree's CWD) resolves by walking up from any worktree's CWD.
 6. `mkdir -p wt` in the new root for per-ticket worktrees.
 7. Swap: `mv <project> <project>-old` then `mv <project>-worktree-setup <project>`.
 8. Report and stop short of deletion: "Migrated to bare-clone layout. Old repo preserved at `<project>-old/`; delete it once verified with `rm -rf <project>-old`."
@@ -256,7 +258,7 @@ If the layout already exists, validate it rather than migrate, and report what w
 1. `.bare/` is a bare repo (`git -C .bare rev-parse --is-bare-repository` → `true`).
 2. `main/` is a valid worktree (`.git` file points into `.bare/worktrees/main`).
 3. Worktree paths are current (`git -C .bare worktree list`); if stale after a rename, `git -C main worktree repair`.
-4. `CLAUDE.md` and `.claude/` exist at the root as real files (copy from `main/` / replace symlinks if not).
+4. `CLAUDE.md`, `.crew.rc`, `.crew.schema.json`, and `.claude/` exist at the root as real files (copy from `main/` / replace symlinks if not).
 5. `wt/` exists (`mkdir -p wt` if missing).
 6. The fetch refspec is set (`git -C .bare config remote.origin.fetch` → `+refs/heads/*:refs/remotes/origin/*`).
 
@@ -264,7 +266,7 @@ If the layout already exists, validate it rather than migrate, and report what w
 
 Give a bare-clone layout a `## Repository Layout` section in `CLAUDE.md` so every worktree inherits the same orientation.
 
-1. If `worktree-layout` is `bare-clone`, ensure `CLAUDE.md` has a `## Repository Layout` section (above `## Workflow Config`) describing the structure and the rule to always work from `main/` or a `wt/` worktree rather than the repo root.
+1. If `worktree-layout` is `bare-clone`, ensure `CLAUDE.md` has a `## Repository Layout` section (above the `## Workflow Configuration` pointer) describing the structure and the rule to always work from `main/` or a `wt/` worktree rather than the repo root.
 2. If that section already exists, leave it untouched.
 3. A `standard` layout needs no such section.
 
@@ -343,48 +345,57 @@ You will not:
 
 ### Step 11 — Present the config for confirmation
 
-Assemble the full `## Workflow Config` block with real detected values — writing `none` for anything genuinely absent — and show it before writing. Ask **"Does this look right? I can change any value."** and wait.
+Assemble the full `.crew.rc` (the `config` object) with real detected values — writing `none` for anything genuinely absent — and show it before writing. Ask **"Does this look right? I can change any value."** and wait.
 
-The block has this shape:
+The file is JSONC (JSON with `//` comments) at the repo root, everything nested under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json` for editor linting. It has this shape:
 
-```markdown
-## Workflow Config
-
-| Key | Value |
-|-----|-------|
-| repo | `<owner>/<repo>` |
-| test-cmd | `npm test` |
-| lint-cmd | `npm run lint` |
-| build-cmd | `npm run build` |
-| e2e-cmd | `npx playwright test` |
-| e2e-framework | `playwright` |
-| agent-ready-label | `agent-ready` |
-| review-followup-label | `review-followup` |
-| findings-assignee | `<github-user>`  *(or `none`)* |
-| mr-reviewer | `<github-user>`  *(or `none`)* |
-| board | `<project number / URL>`  *(or `none`)* |
-| priority-field | `Priority`  *(or `none`)* |
-| priority-field-id | `IFSS_…`  *(the org issue-field node id; lets /crew:run skip re-resolving — §5d)* |
-| status-todo | `TODO` |
-| status-in-progress | `In progress` |
-| status-in-review | `In review` |
-| status-blocked | `Blocked` |
-| status-done | `Done` |
-| branch-convention | `crew/<issue#>-<slug>` |
-| base-branch | `main` |
-| merge-method | `squash`  *(or `merge` / `rebase`)* |
-| worktree-layout | `bare-clone`  *(or `standard`)* |
-| start-cmd | `docker compose up`  *(or `none`)* |
-| readiness-check | `http://localhost:<port>/health`  *(or a port / log pattern)* |
-| port | `3000` |
-| isolation-scheme | `PORT = 3000 + (issue# mod 50); COMPOSE_PROJECT_NAME = <repo>-<issue#>`  *(or `none`)* |
-| identity-mode | `github-app`  *(or `user` / omit — §4.17)* |
-| app-id | `<app id>`  *(github-app only)* |
-| installation-id | `<installation id>`  *(github-app only)* |
-| private-key-path | `~/.config/crew/crew.pem`  *(per machine, outside any repo)* |
-| token-helper | `~/.config/crew/gh-token.sh` |
-| git-author-name | `<slug>[bot]` |
-| git-author-email | `<bot-user-id>+<slug>[bot]@users.noreply.github.com` |
+```jsonc
+// .crew.rc — crew workflow configuration.
+// Written by /crew:adjust; read at the start of every crew run by /crew:run,
+// /crew:pulls, and every dispatched agent. Re-run /crew:adjust to keep it current.
+// `none` means the project genuinely has no such value.
+{
+  "$schema": "./.crew.schema.json",
+  "config": {
+    "repo": "<owner>/<repo>",
+    "test-cmd": "npm test",
+    "lint-cmd": "npm run lint",
+    "build-cmd": "npm run build",
+    "e2e-cmd": "npx playwright test",
+    "e2e-framework": "playwright",
+    "agent-ready-label": "agent-ready",
+    "review-followup-label": "review-followup",
+    "findings-assignee": "none",          // a GitHub user, or none
+    "mr-reviewer": "none",                // a GitHub user, or none
+    "board": "none",                      // Projects-v2 number / URL, or none
+    "priority-field": "Priority",         // or none
+    "priority-field-id": "none",          // the org issue-field node id (IFSS_…) so /crew:run skips re-resolving (§5d), or none
+    "status-todo": "TODO",
+    "status-in-progress": "In progress",
+    "status-in-review": "In review",
+    "status-blocked": "Blocked",
+    "status-done": "Done",
+    "branch-convention": "crew/<issue#>-<slug>",
+    "base-branch": "main",
+    "merge-method": "squash",             // squash | merge | rebase
+    "worktree-layout": "standard",        // bare-clone | standard
+    "start-cmd": "none",                  // e.g. docker compose up, or none
+    "readiness-check": "none",            // health URL / port / log pattern, or none
+    "port": "none",                       // e.g. 3000, or none
+    "isolation-scheme": "none"            // e.g. PORT = 3000 + (issue# mod 50); COMPOSE_PROJECT_NAME = <repo>-<issue#>, or none
+    // crew-identity (§4.17): OMIT this whole block to run as the ambient user.
+    // When opting into the GitHub App bot (Step 10), add it (key + helper live per machine, outside any repo):
+    // "crew-identity": {
+    //   "identity-mode": "github-app",
+    //   "app-id": "<app id>",
+    //   "installation-id": "<installation id>",
+    //   "private-key-path": "~/.config/crew/crew.pem",
+    //   "token-helper": "~/.config/crew/gh-token.sh",
+    //   "git-author-name": "<slug>[bot]",
+    //   "git-author-email": "<bot-user-id>+<slug>[bot]@users.noreply.github.com"
+    // }
+  }
+}
 ```
 
 You will not:
@@ -393,18 +404,25 @@ You will not:
 
 ---
 
-### Step 12 — Write the config to CLAUDE.md
+### Step 12 — Write `.crew.rc` and the CLAUDE.md pointer
 
-Once confirmed, write the block while touching only the `## Workflow Config` section. V2 keeps no on-disk workflow state — there is no `_workflow/` directory or numbered state docs to scaffold, and the only working file (`progress_log`) lives outside the repo and is created by the agents at runtime.
+Once confirmed, write `.crew.rc` and its schema sidecar at the repo root, and leave only a MUST-READ pointer in `CLAUDE.md`. V2 keeps no on-disk workflow state — there is no `_workflow/` directory or numbered state docs to scaffold, and the only working file (`progress_log`) lives outside the repo and is created by the agents at runtime.
 
-1. If `CLAUDE.md` doesn't exist, create it with the `## Workflow Config` section.
-2. If it exists with no `## Workflow Config`, append the section.
-3. If it exists with a `## Workflow Config`, replace only that section and leave every other line untouched.
+1. Write the confirmed `config` object to `.crew.rc` at the repo root, beside `CLAUDE.md` (the project root in a bare-clone layout), creating it or replacing it wholesale on an update.
+2. Copy the schema sidecar to the same root so the `$schema` pointer resolves for editor linting: `cp "${CLAUDE_PLUGIN_ROOT}/crew.schema.json" .crew.schema.json`.
+3. Write the MUST-READ pointer into `CLAUDE.md` as a `## Workflow Configuration` section, touching only that section — create `CLAUDE.md` if absent, append the section if there is none, or replace only that section if it already exists:
+
+   ```markdown
+   ## Workflow Configuration
+
+   > **MUST READ — do not skip.** This project's crew workflow configuration lives in [`.crew.rc`](.crew.rc) at the repo root (walk up from the current directory to find it). Read it in full before any crew action: every command, label, board, branch, merge, stack-run, and identity value the loop and its agents act on comes from there — this file holds only this pointer.
+   ```
 
 You will not:
 
 - Create a `_workflow/` directory, numbered state docs, or a committed `progress_log` — V2 keeps state on GitHub.
-- Overwrite anything in `CLAUDE.md` outside the `## Workflow Config` section.
+- Write the workflow config values into `CLAUDE.md` itself — they live only in `.crew.rc`; `CLAUDE.md` carries just the pointer.
+- Overwrite anything in `CLAUDE.md` outside the `## Workflow Configuration` pointer section.
 
 ---
 
@@ -436,7 +454,7 @@ You will not:
 
 Summarize the run in a few lines.
 
-1. **Config** — written to `CLAUDE.md` (`## Workflow Config`).
+1. **Config** — written to `.crew.rc` at the repo root (with a MUST-READ pointer in `CLAUDE.md`).
 2. **GitHub** — `<owner>/<repo>`, label `<agent-ready-label>`, board (name or `none`), and the four statuses incl. the needs-human/blocked column.
 3. **Validated commands** — and any that failed or are missing.
 4. **Worktree** — `bare-clone` (migrated/validated) or `standard`.
@@ -450,10 +468,18 @@ Summarize the run in a few lines.
 
 When invoked with `update` or a specific key, take the lighter, non-full-scan path.
 
-1. Read the existing `## Workflow Config`.
+1. Read the existing `.crew.rc`.
 2. **Full update** (`update`): re-scan, re-validate the commands and the stack-run config, re-detect label/board/columns, re-check the worktree layout, and present a diff of old → new values before writing.
-3. **Single key**: re-detect just that key (or ask for the value), validate it if it is a command or a stack key (`start-cmd` / `readiness-check` / `isolation-scheme`), and update only that row — `worktree-layout` re-runs **Step 8** (offer/validate, gated).
-4. Write back, replacing only the `## Workflow Config` section.
+3. **Single key**: re-detect just that key (or ask for the value), validate it if it is a command or a stack key (`start-cmd` / `readiness-check` / `isolation-scheme`), and update only that key — `worktree-layout` re-runs **Step 8** (offer/validate, gated).
+4. Write back to `.crew.rc`, replacing only the changed keys and leaving the rest of the `config` object untouched.
+
+---
+
+## Workflow Configuration
+
+`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the optional `crew-identity` block (§4.17) — then leaves only a MUST-READ pointer in `CLAUDE.md` (Step 12).
+
+`.crew.rc` is the single source every component reads instead of guessing — never hardcode an org, repo, board, label, column, or command into any crew file.
 
 ---
 
@@ -474,11 +500,11 @@ The hard boundaries on every run.
 
 ### DON'T:
 
-- Hardcode any org, repo, board, framework, package manager, start command, port, or isolation value — detect each project fresh and read `CLAUDE.md` at runtime.
+- Hardcode any org, repo, board, framework, package manager, start command, port, or isolation value — detect each project fresh and read `.crew.rc` at runtime.
 - Invent a command, a board column, or a `start-cmd` that doesn't exist — an honest `none` beats a command that fails mid-run.
 - Run the bare-clone migration without explicit consent, or delete the old repo automatically.
-- Overwrite anything in `CLAUDE.md` outside the `## Workflow Config` section.
 - Create a `_workflow/` directory, numbered state docs, or a committed `progress_log` — V2 keeps state on GitHub.
+- Write the workflow config into `CLAUDE.md` instead of `.crew.rc`, or overwrite anything in `CLAUDE.md` outside the `## Workflow Configuration` pointer section.
 - Assume board column names — read them with `gh project field-list` and map to the real strings.
 - Skip the confirmation step, or install hooks without consent.
 

@@ -52,7 +52,7 @@ These hooks key off the standard heading shapes from `template.md` — the callo
 ## Invariants
 
 - **Deterministic.** No timestamps, no randomness — re-rendering an unchanged input reproduces the exact same bytes.
-- **Code blocks are opaque.** Markdown inside a fence (e.g. an example `## Workflow Config` table) is escaped literal text, never parsed.
+- **Code blocks are opaque.** Markdown or JSONC inside a fence (e.g. an example `.crew.rc` block) is escaped literal text, never parsed.
 - **No drift.** The HTML is never hand-edited or agent-synthesised; change the Markdown or the template and re-run.
 - **Header, not duplicate.** The frontmatter drives the page header, and a leading `# Name` heading that merely repeats `name` is dropped so the title is not shown twice.
 - **Never put a live placeholder token (double-brace `title`/`body`/etc.) in `template.htm` prose or comments** — `render.mjs` substitutes every occurrence, so a token in a comment would inject a second copy of the content.

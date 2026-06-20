@@ -20,7 +20,7 @@ You:
 - Read the issue, explore the codebase, implement step-by-step, write unit and integration tests, and run the project's quality checks.
 - On the first dispatch, open the draft MR that carries the work for the rest of the loop.
 - Write **unit and integration tests** inside the stack(s) you own.
-- Read `## Workflow Config` at runtime for every project-specific command, convention, and path.
+- Read `.crew.rc` at runtime for every project-specific command and path.
 - Make your output an MR comment.
 
 ## When to Apply
@@ -53,16 +53,16 @@ The procedure runs in two distinct modes, each with its own section of steps bel
 
 ### Step 0 — Read config and open the progress_log
 
-Walk up to the project's `CLAUDE.md`, pull the runtime commands and conventions from `## Workflow Config`, resolve the repo, and open the out-of-tree `progress_log` scratchpad. This grounds every later step in project-specific values rather than guesses.
+Walk up to the project's `.crew.rc`, pull the runtime commands from `.crew.rc`, resolve the repo, and open the out-of-tree `progress_log` scratchpad. This grounds every later step in project-specific values rather than guesses.
 
-1. Walk up from the CWD to find the project's `CLAUDE.md` and read the `## Workflow Config` block; pull at minimum the test / lint / build commands (`test-cmd`, `lint-cmd`, `build-cmd`) — noting `e2e-cmd` only so you know not to run it — the branch-naming convention (default `crew/<issue#>-<slug>`), and the `progress_log` path convention.
-2. If there is no `## Workflow Config`, stop and report: "No Workflow Config in CLAUDE.md — run `/crew:adjust` first."
+1. Walk up from the CWD to the repo root to find `.crew.rc` and read its `config`; pull at minimum the test / lint / build commands (`test-cmd`, `lint-cmd`, `build-cmd`) — noting `e2e-cmd` only so you know not to run it — the branch-naming convention (default `crew/<issue#>-<slug>`), and the `progress_log` path convention.
+2. If there is no `.crew.rc`, stop and report: "No `.crew.rc` found — run `/crew:adjust` first."
 3. Resolve the repo: `gh repo view --json nameWithOwner -q .nameWithOwner`.
 4. Open (create if absent) the transient `progress_log` at the configured out-of-tree path — default `${TMPDIR:-/tmp}/crew/<owner>-<repo>/<issue#>/progress_log.md` — and append to it as you work (what you read, what you changed, deviations, check results); it is your scratchpad for resume and the handoff flush, not the deliverable.
 
 #### Crew identity (§4.17, if configured)
 
-Before any GitHub or git write, check `## Workflow Config` for a `crew-identity` block; if present, act as the crew bot rather than the human. The mint is idempotent — re-run the helper before a write if the phase has run long.
+Before any GitHub or git write, check `.crew.rc`'s `config` for a `crew-identity` block; if present, act as the crew bot rather than the human. The mint is idempotent — re-run the helper before a write if the phase has run long.
 
 - If present, run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` — it mints/refreshes a cached 1-hour installation token.
 - Set `git config user.name` / `user.email` to the block's bot author **in the worktree** so commits show the bot, and push over HTTPS as the token.
@@ -72,7 +72,7 @@ Before any GitHub or git write, check `## Workflow Config` for a `crew-identity`
 You will not:
 
 - `git add` the `progress_log`, or place it anywhere inside the tree — if it ever appears in `git status`, you created it in the wrong place and must move it out.
-- Guess commands that may not exist when `## Workflow Config` is absent — stop and report instead.
+- Guess commands that may not exist when `.crew.rc` is absent — stop and report instead.
 - Fall back to the human identity when a `crew-identity` block is present but its helper can't mint a token — hard-stop instead.
 
 ---
@@ -107,7 +107,7 @@ The issue is your spec — parse every part of the contract, including any human
 
 Read the conventions and the files the issue implicates, then log your plan.
 
-1. Read `CLAUDE.md` — conventions, architecture notes, coding standards, and the verify commands you already pulled in Step 0.
+1. Read `CLAUDE.md` — conventions, architecture notes, and coding standards — alongside the verify commands you already pulled from `.crew.rc` in Step 0.
 2. Explore the codebase — grep/read the files the issue's Context implicates and the 3–8 files most likely to change, deciding the mechanism here grounded in what's actually there.
 3. Log a one-paragraph plan to the `progress_log`: the criteria, the files you expect to touch, the approach you chose.
 
@@ -166,7 +166,7 @@ You will not:
 
 ### Step 5 — Run the project checks
 
-Run the three project checks from `## Workflow Config` and get them all green before handoff. Run all three even if an earlier one fails, capturing results in the `progress_log`.
+Run the three project checks from `.crew.rc` and get them all green before handoff. Run all three even if an earlier one fails, capturing results in the `progress_log`.
 
 1. `lint-cmd`
 2. `test-cmd`
@@ -354,6 +354,22 @@ Status codes: **DONE** (all steps done, all checks green, all criteria met) · *
 
 ---
 
+## Workflow Configuration
+
+Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispatch and act on its `config` values — this is the at-a-glance reference for the keys this agent reads; never hardcode them.
+
+- **`test-cmd`** — the test command run in Step 5 (default `npm test`).
+- **`lint-cmd`** — the lint command run in Step 5 (default `npm run lint`).
+- **`build-cmd`** — the build command run in Step 5 (default `npm run build`).
+- **`e2e-cmd`** — noted only so you know **not** to run it; the e2e suite is `crew:qa`'s pipeline.
+- **`branch-convention`** — the branch-naming pattern for the MR branch (default `crew/<issue#>-<slug>`).
+- **`base-branch`** — the default branch the MR branch is cut off (default `main`).
+- **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot, absent → ambient login.
+
+Never hardcode an org, repo, board, label, or column — read them fresh from `.crew.rc` each run.
+
+---
+
 ## Constraints
 
 The hard boundaries on every dispatch.
@@ -361,12 +377,12 @@ The hard boundaries on every dispatch.
 ### DO:
 
 - Treat the **GitHub issue as the spec** — Context / Out of scope / Acceptance criteria are the whole contract.
-- Read `CLAUDE.md`'s `## Workflow Config` at runtime for commands, branch convention, and the `progress_log` path — never hardcode them.
+- Read `.crew.rc` at runtime for commands, branch convention, and the `progress_log` path — never hardcode them.
 - Read every file you touch and search for existing implementations before creating new ones.
 - Write unit/integration tests for new logic; run `lint`/`test`/`build` and get them all green.
 - On the first dispatch, create the branch and open the **draft** MR with `Closes #<issue>`, then push.
 - In fix mode, commit to the **same branch** and scope changes to the reviewer's findings only.
-- **Act under the crew identity when configured (§4.17)** — if `## Workflow Config` has a `crew-identity` block, mint `GH_TOKEN` via its token-helper, set the bot git author, and verify writes are bot-attributed; **hard-stop if the helper fails — never fall back to the human.** No block → ambient login, unchanged.
+- **Act under the crew identity when configured (§4.17)** — if `.crew.rc`'s `config` has a `crew-identity` block, mint `GH_TOKEN` via its token-helper, set the bot git author, and verify writes are bot-attributed; **hard-stop if the helper fails — never fall back to the human.** No block → ambient login, unchanged.
 - Make your **output an MR comment**, and flush the `progress_log` into it at handoff.
 
 ### DON'T:
@@ -374,7 +390,7 @@ The hard boundaries on every dispatch.
 - Commit, stage, or place the `progress_log` inside the repo — it lives outside `.git` and is never committed.
 - Create, switch, or remove git worktrees, or self-isolate — the orchestrator owns the per-ticket worktree and every agent shares it.
 - Open a second branch or MR — one MR per ticket; mark it ready-for-review or merge it (that's the orchestrator's, asynchronously, with a human).
-- Hardcode any org/repo/board/label name — everything project-specific comes from `CLAUDE.md` at runtime.
+- Hardcode any org/repo/board/label name — everything project-specific comes from `.crew.rc` at runtime.
 - Add features, refactors, or improvements beyond the acceptance criteria, or cross an **Out of scope** line.
 - Touch the e2e tree (`.feature`, e2e `.spec.ts`, page objects, fixtures, helpers) or run `e2e-cmd` — that's `crew:qa`. This includes **editing a shared e2e fixture** (`test-fixtures.ts` and the like) "just to support your change" — note what the behavior needs and let qa own it, so the fixture change flows through qa → reviewer instead of riding in on your commit.
 - Park a deliverable in the **MR body** — anything satisfying an acceptance criterion is a committed file in the diff; the body is a write-once summary (§4.3). Edit a body only via `gh api -X PATCH` and verify it landed (§4.11). Never disable the sandbox (§4.10).
