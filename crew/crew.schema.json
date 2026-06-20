@@ -26,6 +26,9 @@
         "e2e-framework": { "type": "string", "description": "Detected e2e framework (e.g. playwright / cypress / pytest), or `none`." },
 
         "agent-ready-label": { "type": "string", "description": "The label /crew:run filters open issues on — the queue and kill switch (default agent-ready)." },
+        "instructions-label": { "type": "string", "description": "The label /crew:pro plans from — a rough, milestone-sized instruction ticket it turns into a granular board (default instructions)." },
+        "planned-label": { "type": "string", "description": "The gate label /crew:pro's planner files created tickets under — never agent-ready; the human promotes (default agent-planned)." },
+        "epic-label": { "type": "string", "description": "The label /crew:pro's planner applies to an epic parent for a large feature group; the run loop skips epics (default epic)." },
         "review-followup-label": { "type": "string", "description": "The label crew:findings files advisory follow-ups under (default review-followup)." },
         "findings-assignee": { "type": "string", "description": "GitHub user crew:findings assigns filed follow-ups to, or `none`." },
         "mr-reviewer": { "type": "string", "description": "GitHub user /crew:run requests as reviewer on each finished MR, or `none`." },
