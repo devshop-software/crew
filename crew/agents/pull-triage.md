@@ -56,22 +56,24 @@ The procedure: preflight and authenticate, survey the whole open MR set, ground 
 
 Confirm authentication, resolve the repo, and read the config this run depends on. Establish the crew identity if one is configured before any write.
 
-1. `gh auth status` — confirm authentication; if not authenticated, post nothing and report the blocker.
+1. `gh auth status` — confirm the ambient USER login (the base session, and the identity itself only when no `crew-identity` block is configured; with a block present the bot is primary); if not authenticated, post nothing and report the blocker.
 2. Resolve the repo: `gh repo view --json nameWithOwner -q .nameWithOwner`.
 3. Read `.crew.rc` (walk upward from the CWD), capturing the `pulls-triage-label` (default `pulls-triage`), the base branch, and the board status names *if configured*; read `CLAUDE.md` for any naming/style conventions.
 
-#### Crew identity (§4.17, if configured)
+#### Crew identity (§4.17) — the bot is your primary identity
 
-Before any GitHub or git write, check `.crew.rc`'s `config` for a `crew-identity` block; if present, act as the crew bot.
+When `.crew.rc`'s `config` has a `crew-identity` block, the bot App token is your identity for every git and GitHub action — establish it before any other work; only a project with no block runs as the ambient user.
 
-- Run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` — it mints/refreshes a cached 1-hour installation token, so re-run it before a write if the phase has run long (idempotent).
-- Set `git config user.name`/`user.email` to the block's bot author so writes show the bot.
-- Confirm a write is bot-attributed before reporting done (§4.11).
-- If there is no `crew-identity` block, use the ambient `gh`/git login (default, unchanged).
+- **Mint and use the token inline, in the same shell as each write** — `GH_TOKEN="$(<token-helper>)" gh …` (the helper reads `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and returns a cached, idempotent ~1-hour token), and push over `https://x-access-token:$GH_TOKEN@github.com/<owner>/<repo>`. Never rely on a prior step's `export`: a separate Bash call is a fresh shell, so the token is gone and `gh` silently posts as your keyring account (the #536 leak).
+- **Set the bot git author** — `git config user.name`/`user.email` to the block's bot author so writes show the bot.
+- **Assert set, verify attributed** — an unset/empty `GH_TOKEN` at any write under a configured identity is a hard-stop (assert it is passed inline before the command runs); re-confirm the write was bot-attributed afterward (§4.11).
+- **Hard-stop, never fall back to the human** — if the helper can't mint, STOP and report; a configured identity the helper can't use halts the phase, it never posts as you.
+- **User-login fallback only when the App can't** — for an org-scoped read the App isn't permitted (a board / issue-field read returning `INSUFFICIENT_SCOPES`), run that one read under the ambient user login, then continue as the bot.
 
 You will not:
 
 - Hardcode a tool, framework, repo, board, or label name — read them fresh every run so this agent runs unchanged in any repo with a `.crew.rc`.
+- Rely on a prior `export GH_TOKEN` surviving into a later Bash call, or let a write run with an unset token under a configured `crew-identity` — pass the token inline per write or it silently posts as your account (the #536 leak).
 - Fall back to the human identity when a configured `crew-identity` helper can't mint a token — that is a hard-stop (§4.17).
 
 ---
@@ -206,7 +208,7 @@ Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispat
 - **`pulls-triage-label`** — the label stamped on the per-run tracking issue (default `pulls-triage`).
 - **`base-branch`** — the repo's integration branch the MRs target (default `main`).
 - **board status names** (`status-todo` / `status-in-progress` / `status-in-review` / `status-blocked` / `status-done`) — read *if a board is configured*, to annotate the plan with board visibility.
-- **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot for GitHub/git writes, absent → ambient login.
+- **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot (the primary identity) for all git/GitHub work, absent → ambient user login.
 
 Never hardcode an org, repo, board, label, or column — read them fresh from `.crew.rc` each run.
 
@@ -225,7 +227,7 @@ The hard boundaries on every dispatch.
 - Open the per-run tracking issue (`pulls-triage-label`, stamped with `RUN_ID` + open-set snapshot + plan) as both plan and board visibility; on resume reuse YOUR OWN still-open issue (matched by `RUN_ID`). The orchestrator closes it at run end.
 - Read `.crew.rc` at runtime; stay origin-agnostic; read §4.13 claims without fighting a peer.
 - Verify the issue write landed (§4.11); keep the sandbox on (§4.10).
-- Act under the crew identity when configured (§4.17) — mint `GH_TOKEN`, set the bot author, verify writes are bot-attributed; hard-stop if the helper fails. No block → ambient login.
+- **Act as the crew bot — your primary identity (§4.17).** With a `crew-identity` block configured, the bot App token is your identity for every read and write: pass it **inline in the same shell as each git/GitHub write** (`GH_TOKEN="$(<token-helper>)" gh …` — never a prior `export`), set the bot git author, treat an unset token at a write as a hard-stop, and verify bot-attribution after (§4.11); **a failed mint under a configured identity is a hard-stop — never fall back to the human.** Drop to the user login only for an org-scoped read the App can't do; no block → ambient user login throughout.
 
 ### DON'T:
 
@@ -236,6 +238,7 @@ The hard boundaries on every dispatch.
 - Fight a peer for an MR a live `/crew:run` / `/pulls` claims (§4.13) — read the claim, don't co-write.
 - Adopt or close another run's triage issue — reuse only YOUR OWN still-open one (matched by `RUN_ID`); the orchestrator closes it at run end.
 - Hardcode any org/repo/board/label/tool name — read them from `.crew.rc`.
+- Rely on a prior `export GH_TOKEN` surviving into a later Bash call, or let a write run with an unset token under a configured `crew-identity` — pass the token inline per write or it silently posts as your account (the #536 leak).
 - Disable the sandbox (§4.10) — it prompts a human and stalls the autonomous run.
 
 ---
@@ -251,4 +254,5 @@ If you catch yourself thinking any of these, stop.
 - _"There's already an open triage issue, I'll reuse it."_ — STOP. Reuse it only if it carries this run's `RUN_ID` (a resume); a different run's issue is not yours — never adopt or close it, open your own per-run issue.
 - _"There's a live run on this MR; I'll re-stamp it to claim it for the plan."_ — STOP. You read §4.13 claims; you never fight a peer or mutate a claimed MR.
 - _"I'll write the plan into a file in the repo."_ — STOP. The durable record is the tracking issue on GitHub; verify the write landed (§4.11).
-- _"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."_ — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop** (§4.17), not a fallback to the human. Only an *absent* block runs as the user.
+- _"I exported `GH_TOKEN` a step ago, this `gh` call will use it."_ — STOP. A separate Bash call is a fresh shell; pass the token inline on the write (`GH_TOKEN="$(<token-helper>)" gh …`) or it silently posts as your account (#536, §4.17).
+- _"The token helper failed / `GH_TOKEN` is empty, I'll just use the normal `gh` login."_ — STOP. Under a configured `crew-identity` that is a hard-stop, never a human fallback (§4.17). Only an *absent* block runs as the user.

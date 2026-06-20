@@ -325,21 +325,23 @@ You will not:
 
 ---
 
-### Step 10 — Crew identity (optional GitHub App, §4.17)
+### Step 10 — Crew identity (the bot is the primary identity, §4.17)
 
-By default the loop authenticates as the ambient user, so crew's comments/commits show under your account; a project can opt into a dedicated GitHub App bot instead, shown as `<slug>[bot]` and natively Approvable by a human. Offer it, and configure only on an explicit yes and only once the App + private key already exist.
+The crew bot — a dedicated GitHub App shown as `<slug>[bot]` and natively Approvable by a human — is the **recommended primary identity**: when configured, every component acts as the bot for all git/GitHub work (§4.17), and running under your own account is the fallback. It is still opt-in and gated on a real org-owned App + private key already existing, so recommend it and configure only on an explicit yes.
 
-Offer: **"Run crew under a dedicated GitHub App identity (bot comments/commits)? Needs an org-owned App + its private key already created — say no to keep running as your account."** Then gather and test before recording:
+Offer: **"Set up crew's dedicated GitHub App bot as the primary identity (recommended — bot-authored comments/commits, human-Approvable PRs)? Needs an org-owned App + its private key already created; say no to run under your own account instead."** Then gather, broaden, and test before recording:
 
 1. Resolve the values — `app-id` (App settings page); `installation-id` (`gh api /orgs/<owner>/installations --jq '.installations[]|select(.app_slug=="<slug>")|.id'`); the bot git author, name `<slug>[bot]` and email `<bot-user-id>+<slug>[bot]@users.noreply.github.com` (`gh api '/users/<slug>[bot]' --jq .id`).
 2. Place the key + helper per machine, outside any repo — private key at `~/.config/crew/crew.pem` (`chmod 600`), and install the bundled helper `${CLAUDE_PLUGIN_ROOT}/scripts/gh-token.sh` → `~/.config/crew/gh-token.sh` (`chmod +x`).
-3. Test it (mandatory) — run the helper (`CREW_APP_ID=<id> CREW_INSTALLATION_ID=<id> CREW_APP_PRIVATE_KEY_PATH=<path> ~/.config/crew/gh-token.sh`) to mint a token, then confirm it reaches the repo (`curl -fsS -H "Authorization: token <token>" https://api.github.com/installation/repositories` lists it).
-4. On a green test, record the `crew-identity` rows (Step 11); if the mint or the reach fails, report the likely cause (key path / token scopes / which repos the App is installed on) and leave the loop on the user identity; on decline, record `identity-mode: user` (or omit the block) and the loop runs as the user.
+3. Advise the **full permission set** so the bot can operate 100% of the time — Repository: Contents, Issues, Pull requests (read & write), Metadata + Checks/Commit statuses (read); Organization: Projects (read & write, for the board) and Members (read), plus issue-field access where the App supports it. Tell the user to grant anything missing on the App settings page; whatever the App genuinely can't be granted (e.g. the org Priority issue-field preview) stays a per-operation **user-login fallback** at runtime.
+4. Test it (mandatory) — mint a token (`CREW_APP_ID=<id> CREW_INSTALLATION_ID=<id> CREW_APP_PRIVATE_KEY_PATH=<path> ~/.config/crew/gh-token.sh`), confirm it reaches the repo (`curl -fsS -H "Authorization: token <token>" https://api.github.com/installation/repositories` lists it), and probe the org-scoped reads the loop relies on under the token (a Projects board read and the Priority issue-field GraphQL) so you know which the bot can do and which fall back to the user.
+5. On a green test, record the `crew-identity` rows (Step 11) and note any operations that will use the user-login fallback; if the mint or the repo-reach fails, report the likely cause (key path / which repos the App is installed on / missing permissions) and leave the loop on the user identity; on decline, record `identity-mode: user` (or omit the block) and the loop runs as the user.
 
 You will not:
 
 - Place the private key or helper inside a repo or a worktree-copied `.env` — they live per machine, outside any repo.
 - Record the `crew-identity` block before a green test — a block the helper can't use makes every component hard-stop (§4.17).
+- Frame the bot as a mere add-on — when configured it is the primary identity; the user account is the fallback.
 
 ---
 

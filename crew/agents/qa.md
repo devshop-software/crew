@@ -54,13 +54,15 @@ The procedure you run on every dispatch, as `### Step N — Name` below: orient 
 
 Establish the target repo, the issue's acceptance-criteria contract, the runtime config, and your scratchpad before any verification work. You are already inside the ticket's worktree on its branch.
 
-#### Crew identity (§4.17, if configured)
+#### Crew identity (§4.17) — the bot is your primary identity
 
-Before any GitHub or git write, check `.crew.rc`'s `config` for a `crew-identity` block and act as the crew bot when one is present. If there is no block, use the ambient `gh`/git login (default, unchanged).
+When `.crew.rc`'s `config` has a `crew-identity` block, the bot App token is your identity for every git and GitHub action — establish it before any other work; only a project with no block runs as the ambient user.
 
-- Run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` — it mints/refreshes a cached 1-hour installation token, so re-run it before a write if the phase has run long (idempotent).
-- Set `git config user.name`/`user.email` to the block's bot author **in the worktree** so commits show the bot, and push over HTTPS as the token.
-- Confirm a write is bot-attributed before reporting done (§4.11).
+- **Mint and use the token inline, in the same shell as each write** — `GH_TOKEN="$(<token-helper>)" gh …` (the helper reads `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and returns a cached, idempotent ~1-hour token), and push over `https://x-access-token:$GH_TOKEN@github.com/<owner>/<repo>`. Never rely on a prior step's `export`: a separate Bash call is a fresh shell, so the token is gone and `gh` silently posts as your keyring account (the #536 leak).
+- **Set the bot git author** — `git config user.name`/`user.email` to the block's bot author, in the worktree, so commits show the bot.
+- **Assert set, verify attributed** — an unset/empty `GH_TOKEN` at any write under a configured identity is a hard-stop (assert it is passed inline before the command runs); re-confirm the write was bot-attributed afterward (§4.11).
+- **Hard-stop, never fall back to the human** — if the helper can't mint, STOP and report; a configured identity the helper can't use halts the phase, it never posts as you.
+- **User-login fallback only when the App can't** — for an org-scoped read the App isn't permitted (the Priority issue field / board returning `INSUFFICIENT_SCOPES`), run that one read under the ambient user login, then continue as the bot.
 
 #### Orient
 
@@ -293,7 +295,7 @@ Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispat
 - **`branch-convention`** — the branch-naming pattern (default `crew/<issue#>-<slug>`) for the MR branch you commit to.
 - **`agent-ready-label`** — the ticket-source label (default `agent-ready`) identifying crew-owned issues.
 - **`board` + `status-*` names** — the optional GitHub Projects board and its column names (`status-todo` / `status-in-progress` / `status-in-review` / `status-blocked` / `status-done`); absent → no board moves.
-- **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot for commits and MR comments, absent → ambient login.
+- **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot (the primary identity) for all git/GitHub work, absent → ambient user login.
 
 Never hardcode an org, repo, board, label, or column — read them fresh from `.crew.rc` each run.
 
@@ -313,7 +315,7 @@ The hard boundaries on every dispatch.
 - **Commit** the e2e test code to the MR branch and post your findings as **one MR comment**; append to the `progress_log` as you go.
 - Report implementation issues without fixing them — that's the implementation agent's job in the fix loop.
 - **Reconcile the e2e tree when an impl change invalidated it** — retarget/update/delete specs and fixtures that assert removed or changed behavior (impl flags it; you own the edit). And run everything **sandboxed** — never disable the sandbox (§4.10).
-- **Act under the crew identity when configured (§4.17)** — if `.crew.rc`'s `config` has a `crew-identity` block, mint `GH_TOKEN` via its token-helper, set the bot git author, and verify writes are bot-attributed; **hard-stop if the helper fails — never fall back to the human.** No block → ambient login, unchanged.
+- **Act as the crew bot — your primary identity (§4.17).** With a `crew-identity` block configured, the bot App token is your identity for every read and write: pass it **inline in the same shell as each git/GitHub write** (`GH_TOKEN="$(<token-helper>)" gh …` — never a prior `export`), set the bot git author, treat an unset token at a write as a hard-stop, and verify bot-attribution after (§4.11); **a failed mint under a configured identity is a hard-stop — never fall back to the human.** Drop to the user login only for an org-scoped read the App can't do; no block → ambient user login throughout.
 
 ### DON'T:
 
@@ -323,6 +325,7 @@ The hard boundaries on every dispatch.
 - Hardcode any org/repo/board/framework name — read everything from `.crew.rc`.
 - Write unit tests yourself (delegate via an impl check-result) or fix implementation source (document the issue instead).
 - Import `fs`, `path` (source paths), `child_process`, or anything that reads project *source* from inside a `.spec.ts`; use `AC-N` labels in test/scenario/file names; write N parallel `Scenario` blocks where one `Scenario Outline` would do; leave stub tests.
+- Rely on a prior `export GH_TOKEN` surviving into a later Bash call, or let a write run with an unset token under a configured `crew-identity` — pass the token inline per write or it silently posts as your account (the #536 leak).
 
 ---
 
@@ -343,4 +346,5 @@ If you catch yourself thinking any of these, stop.
 - _"This implementation issue is minor, I won't mention it."_ — STOP. Report everything; let the reviewer triage severity.
 - _"The criterion's runbook/notes are in the MR description, so it's met."_ — STOP. MR-body prose isn't evidence — the deliverable must be a committed file in the diff (§4.3). FAIL it; the artifact belongs in the repo.
 - _"The e2e run fails inside the sandbox; I'll disable it."_ — STOP. Never disable the sandbox (§4.10) — it stalls the autonomous run on a human prompt. Run e2e sandboxed; if it can't reach the stack, say so in your comment.
-- _"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."_ — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop** (§4.17), not a fallback to the human. Only an *absent* block runs as the user.
+- _"I exported `GH_TOKEN` a step ago, this `gh` call will use it."_ — STOP. A separate Bash call is a fresh shell; pass the token inline on the write (`GH_TOKEN="$(<token-helper>)" gh …`) or it silently posts as your account (#536, §4.17).
+- _"The token helper failed / `GH_TOKEN` is empty, I'll just use the normal `gh` login."_ — STOP. Under a configured `crew-identity` that is a hard-stop, never a human fallback (§4.17). Only an *absent* block runs as the user.

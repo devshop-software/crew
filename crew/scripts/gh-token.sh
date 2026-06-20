@@ -9,7 +9,10 @@
 #   CREW_APP_PRIVATE_KEY_PATH   path to the App private key (.pem), outside any repo
 #
 # Caches the token (mode 600) under $TMPDIR and reuses it until ~5 min before the
-# 1-hour expiry, so callers can invoke it freely (e.g. before every gh/git write).
+# 1-hour expiry, so callers invoke it freely. The bot is the PRIMARY identity:
+# pass the token INLINE in the same shell as each git/GitHub write —
+# `GH_TOKEN="$(gh-token.sh)" gh ...` — never a prior `export` carried across
+# separate Bash calls (a fresh shell drops it and gh silently posts as the human).
 set -euo pipefail
 
 : "${CREW_APP_ID:?crew gh-token: set CREW_APP_ID}"

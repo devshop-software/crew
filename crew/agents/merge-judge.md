@@ -56,19 +56,23 @@ The procedure the agent runs: preflight, the cold diff read, the cross-check, th
 
 Confirm auth, resolve the MR handed in the dispatch, and read the project conventions before any other read or write.
 
-1. `gh auth status` — confirm authentication; if not authenticated, post nothing and report the blocker.
+1. `gh auth status` — confirm the ambient USER login (the base session; the identity only when no bot is configured — the bot is primary when a `crew-identity` block is present); if not authenticated, post nothing and report the blocker.
 2. Resolve the repo and the MR: `gh pr view <n> --json number,headRefName,baseRefName,mergeable,mergeStateStatus,statusCheckRollup,labels`.
 3. Read `CLAUDE.md` for project conventions, and read `.crew.rc` for the `pulls-triage-label` and the base branch.
 
-#### Crew identity (§4.17, if configured)
+#### Crew identity (§4.17) — the bot is your primary identity
 
-Before any GitHub or git write, check `.crew.rc`'s `config` for a `crew-identity` block; if present, act as the crew bot so writes show the bot, and if absent use the ambient `gh`/git login (default, unchanged). Your question reply is agent-authored.
+When `.crew.rc`'s `config` has a `crew-identity` block, the bot App token is your identity for every git and GitHub action — establish it before any other work; only a project with no block runs as the ambient user. Your question reply is agent-authored.
 
-- Run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` — it mints/refreshes a cached 1-hour installation token, so re-run it before a write if the phase has run long (idempotent).
-- Set `git config user.name` / `user.email` to the block's bot author, and confirm a write is bot-attributed before reporting done (§4.11).
+- **Mint and use the token inline, in the same shell as each write** — `GH_TOKEN="$(<token-helper>)" gh …` (the helper reads `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and returns a cached, idempotent ~1-hour token), and push over `https://x-access-token:$GH_TOKEN@github.com/<owner>/<repo>`. Never rely on a prior step's `export`: a separate Bash call is a fresh shell, so the token is gone and `gh` silently posts as your keyring account (the #536 leak).
+- **Set the bot git author** — `git config user.name`/`user.email` to the block's bot author, in the worktree, so commits show the bot.
+- **Assert set, verify attributed** — an unset/empty `GH_TOKEN` at any write under a configured identity is a hard-stop (assert it is passed inline before the command runs); re-confirm the write was bot-attributed afterward (§4.11).
+- **Hard-stop, never fall back to the human** — if the helper can't mint, STOP and report; a configured identity the helper can't use halts the phase, it never posts as you.
+- **User-login fallback only when the App can't** — for an org-scoped read the App isn't permitted (the Priority issue field / board returning `INSUFFICIENT_SCOPES`), run that one read under the ambient user login, then continue as the bot.
 
 You will not:
 
+- Rely on a prior `export GH_TOKEN` surviving into a later Bash call, or let a write run with an unset token under a configured `crew-identity` — pass the token inline per write or it silently posts as your account (the #536 leak).
 - Fall back to the human identity if a `crew-identity` block is present but the helper can't mint a token — hard-stop instead (§4.17).
 - Let your agent-authored question reply itself block the merge — only human-authored comments block.
 
@@ -169,7 +173,7 @@ Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispat
 - **`pulls-triage-label`** — the label on the cross-MR triage tracking issue you cross-check (Step 2) and write material discoveries back to (Step 5).
 - **`base-branch`** — the branch this MR merges into and conflicts/lags against; default `main`.
 - **`merge-method`** — the merge strategy (`squash` / `merge` / `rebase`, default `squash`) your verdict assumes the orchestrator will use to land a MERGE.
-- **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → mint `GH_TOKEN` and act as the bot for your question reply / triage write-back, absent → ambient login.
+- **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot (the primary identity) for all git/GitHub work, absent → ambient user login.
 
 Never hardcode an org, repo, board, label, or column — read them fresh from `.crew.rc` each run.
 
@@ -187,7 +191,7 @@ The hard boundaries on every dispatch.
 - Return a **structured verdict** — `MERGE` / `FIX(conflict|ci)` (naming the files) / `PARK(reason)`.
 - Do **SCOPED** self-research (your MR + immediately-related ones) when triage looks incomplete, and **write material discoveries back to the triage issue** (or signal a refresh); **verify the write landed (§4.11)**.
 - Read `.crew.rc` at runtime; stay **origin-agnostic**; honor §4.13 (don't fight a peer's claim), keep the sandbox on (§4.10).
-- **Act under the crew identity when configured (§4.17)** — mint `GH_TOKEN`, set the bot author, verify writes are bot-attributed; **hard-stop if the helper fails — never fall back to the human**. No block → ambient login. Your reply is agent-authored and must never self-block.
+- **Act as the crew bot — your primary identity (§4.17).** With a `crew-identity` block configured, the bot App token is your identity for every read and write: pass it **inline in the same shell as each git/GitHub write** (`GH_TOKEN="$(<token-helper>)" gh …` — never a prior `export`), set the bot git author, treat an unset token at a write as a hard-stop, and verify bot-attribution after (§4.11); **a failed mint under a configured identity is a hard-stop — never fall back to the human.** Drop to the user login only for an org-scoped read the App can't do; no block → ambient user login throughout. Your reply is agent-authored and must never self-block.
 
 ### DON'T:
 
@@ -199,6 +203,7 @@ The hard boundaries on every dispatch.
 - **Answer a question twice** — dedup on a hidden marker comment across sweeps.
 - **Read `isResolved` from REST / `gh pr view`** — use **GraphQL**.
 - **Re-ground the whole MR set** — self-research is scoped to your MR + immediately-related ones; the full survey is `pull-triage`'s.
+- **Rely on a prior `export GH_TOKEN` surviving into a later Bash call**, or let a write run with an unset token under a configured `crew-identity` — pass the token inline per write or it silently posts as your account (the #536 leak).
 - Hardcode any org/repo/board/label/tool name; disable the sandbox (§4.10).
 
 ---
@@ -216,4 +221,5 @@ If you catch yourself thinking any of these, stop.
 - _"`isResolved` isn't in the `gh pr view` JSON, so the thread must be resolved."_ — STOP. REST doesn't expose it. Read **GraphQL `reviewThreads.isResolved`**.
 - _"Triage missed a dependency, so I'll re-survey all the open MRs."_ — STOP. Self-research is **scoped** to your MR + immediately-related ones; write the discovery **back to the triage issue**. The full survey is `pull-triage`'s.
 - _"I'll just resolve the human's thread (or remove the hold label) myself so it can merge."_ — STOP. The **human releases the park** — by resolving the thread or removing the hold label. You answer the question; you never resolve the thread or remove the label for them.
-- _"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."_ — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop** (§4.17), not a fallback to the human. Only an *absent* block runs as the user.
+- _"I exported `GH_TOKEN` a step ago, this `gh` call will use it."_ — STOP. A separate Bash call is a fresh shell; pass the token inline on the write (`GH_TOKEN="$(<token-helper>)" gh …`) or it silently posts as your account (#536, §4.17).
+- _"The token helper failed / `GH_TOKEN` is empty, I'll just use the normal `gh` login."_ — STOP. Under a configured `crew-identity` that is a hard-stop, never a human fallback (§4.17). Only an *absent* block runs as the user.

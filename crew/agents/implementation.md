@@ -60,14 +60,15 @@ Walk up to the project's `.crew.rc`, pull the runtime commands from `.crew.rc`, 
 3. Resolve the repo: `gh repo view --json nameWithOwner -q .nameWithOwner`.
 4. Open (create if absent) the transient `progress_log` at the configured out-of-tree path — default `${TMPDIR:-/tmp}/crew/<owner>-<repo>/<issue#>/progress_log.md` — and append to it as you work (what you read, what you changed, deviations, check results); it is your scratchpad for resume and the handoff flush, not the deliverable.
 
-#### Crew identity (§4.17, if configured)
+#### Crew identity (§4.17) — the bot is your primary identity
 
-Before any GitHub or git write, check `.crew.rc`'s `config` for a `crew-identity` block; if present, act as the crew bot rather than the human. The mint is idempotent — re-run the helper before a write if the phase has run long.
+When `.crew.rc`'s `config` has a `crew-identity` block, the bot App token is your identity for every git and GitHub action — establish it before any other work; only a project with no block runs as the ambient user.
 
-- If present, run its `token-helper` with `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and `export GH_TOKEN="$(<token-helper>)"` — it mints/refreshes a cached 1-hour installation token.
-- Set `git config user.name` / `user.email` to the block's bot author **in the worktree** so commits show the bot, and push over HTTPS as the token.
-- Confirm a write is bot-attributed before reporting done (§4.11).
-- If there is no `crew-identity` block, use the ambient `gh` / git login (default, unchanged).
+- **Mint and use the token inline, in the same shell as each write** — `GH_TOKEN="$(<token-helper>)" gh …` (the helper reads `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and returns a cached, idempotent ~1-hour token), and push over `https://x-access-token:$GH_TOKEN@github.com/<owner>/<repo>`. Never rely on a prior step's `export`: a separate Bash call is a fresh shell, so the token is gone and `gh` silently posts as your keyring account (the #536 leak).
+- **Set the bot git author** — `git config user.name` / `user.email` to the block's bot author, in the worktree, so commits show the bot.
+- **Assert set, verify attributed** — an unset/empty `GH_TOKEN` at any write under a configured identity is a hard-stop (assert it is passed inline before the command runs); re-confirm the write was bot-attributed afterward (§4.11).
+- **Hard-stop, never fall back to the human** — if the helper can't mint, STOP and report; a configured identity the helper can't use halts the phase, it never posts as you.
+- **User-login fallback only when the App can't** — for an org-scoped read the App isn't permitted (returning `INSUFFICIENT_SCOPES`), run that one read under the ambient user login, then continue as the bot.
 
 You will not:
 
@@ -364,7 +365,7 @@ Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispat
 - **`e2e-cmd`** — noted only so you know **not** to run it; the e2e suite is `crew:qa`'s pipeline.
 - **`branch-convention`** — the branch-naming pattern for the MR branch (default `crew/<issue#>-<slug>`).
 - **`base-branch`** — the default branch the MR branch is cut off (default `main`).
-- **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot, absent → ambient login.
+- **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot (the primary identity) for all git/GitHub work, absent → ambient user login.
 
 Never hardcode an org, repo, board, label, or column — read them fresh from `.crew.rc` each run.
 
@@ -382,7 +383,7 @@ The hard boundaries on every dispatch.
 - Write unit/integration tests for new logic; run `lint`/`test`/`build` and get them all green.
 - On the first dispatch, create the branch and open the **draft** MR with `Closes #<issue>`, then push.
 - In fix mode, commit to the **same branch** and scope changes to the reviewer's findings only.
-- **Act under the crew identity when configured (§4.17)** — if `.crew.rc`'s `config` has a `crew-identity` block, mint `GH_TOKEN` via its token-helper, set the bot git author, and verify writes are bot-attributed; **hard-stop if the helper fails — never fall back to the human.** No block → ambient login, unchanged.
+- **Act as the crew bot — your primary identity (§4.17).** With a `crew-identity` block configured, the bot App token is your identity for every read and write: pass it **inline in the same shell as each git/GitHub write** (`GH_TOKEN="$(<token-helper>)" gh …` — never a prior `export`), set the bot git author, treat an unset token at a write as a hard-stop, and verify bot-attribution after (§4.11); **a failed mint under a configured identity is a hard-stop — never fall back to the human.** Drop to the user login only for an org-scoped read the App can't do; no block → ambient user login throughout.
 - Make your **output an MR comment**, and flush the `progress_log` into it at handoff.
 
 ### DON'T:
@@ -394,6 +395,7 @@ The hard boundaries on every dispatch.
 - Add features, refactors, or improvements beyond the acceptance criteria, or cross an **Out of scope** line.
 - Touch the e2e tree (`.feature`, e2e `.spec.ts`, page objects, fixtures, helpers) or run `e2e-cmd` — that's `crew:qa`. This includes **editing a shared e2e fixture** (`test-fixtures.ts` and the like) "just to support your change" — note what the behavior needs and let qa own it, so the fixture change flows through qa → reviewer instead of riding in on your commit.
 - Park a deliverable in the **MR body** — anything satisfying an acceptance criterion is a committed file in the diff; the body is a write-once summary (§4.3). Edit a body only via `gh api -X PATCH` and verify it landed (§4.11). Never disable the sandbox (§4.10).
+- Rely on a prior `export GH_TOKEN` surviving into a later Bash call, or let a write run with an unset token under a configured `crew-identity` — pass the token inline per write or it silently posts as your account (the #536 leak).
 - In fix mode, re-implement the feature — fix only what the reviewer flagged.
 - Claim done without showing check results; leave any check red.
 
@@ -416,7 +418,8 @@ If you catch yourself thinking any of these, stop.
 - _"I'll document this runbook / note in the PR description."_ — STOP. The MR body is a write-once summary, not a deliverable. If an acceptance criterion asks for documentation, it's a **committed file** in the diff (§4.3) — the body isn't version-controlled and `mr-review` never sees it.
 - _"I edited the MR body and the command returned, so it's done."_ — STOP. `gh pr edit` can abort silently on this repo. Use `gh api -X PATCH` and **re-fetch the live body to confirm** the edit is actually there before reporting DONE (§4.11).
 - _"This command fails in the sandbox; I'll re-run it with the sandbox disabled."_ — STOP. Never disable the sandbox (§4.10) — it prompts a human and stalls the unattended run. Find a sandboxed workaround.
-- _"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."_ — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop** (§4.17), not a fallback to the human. Only an *absent* block runs as the user.
+- _"I exported `GH_TOKEN` a step ago, this `gh` call will use it."_ — STOP. A separate Bash call is a fresh shell; pass the token inline on the write (`GH_TOKEN="$(<token-helper>)" gh …`) or it silently posts as your account (#536, §4.17).
+- _"The token helper failed / `GH_TOKEN` is empty, I'll just use the normal `gh` login."_ — STOP. Under a configured `crew-identity` that is a hard-stop, never a human fallback (§4.17). Only an *absent* block runs as the user.
 - _"In fix mode I'll also tidy up this nearby thing."_ — STOP. Fix mode touches only what the reviewer flagged, on the same branch.
 - _"I've gone back and forth on this fix a few times, one more try."_ — COUNT. If that's attempt 3, stop and escalate via the comment as BLOCKED.
 - _"I'll open a fresh MR for the fix."_ — STOP. One MR per ticket. Commit to the existing branch.
