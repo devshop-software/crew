@@ -1,6 +1,6 @@
 ---
 name: adjust
-description: "Onboards a project for the crew loop: scans and validates the toolchain (test / lint / build / e2e / app-start) and the GitHub wiring (ticket label, board columns, priority field, merge method, optional bot identity), offers a gated bare-clone worktree migration, and writes one `.crew.rc` config file at the repo root (plus a MUST-READ pointer in CLAUDE.md) that every other crew component reads at runtime. Use when the user invokes /crew:adjust."
+description: "Onboards a project for the crew loop: scans and validates the toolchain (test / lint / build / e2e / app-start) and the GitHub wiring (ticket + /crew:pro planning labels, board columns, priority field, merge method, optional bot identity), offers a gated bare-clone worktree migration, and writes one `.crew.rc` config file at the repo root (plus a MUST-READ pointer in CLAUDE.md) that every other crew component reads at runtime. Use when the user invokes /crew:adjust."
 metadata:
   type: regular
   mode: single-execution
@@ -34,7 +34,7 @@ Read `$ARGUMENTS` to choose the scope of the run.
 |--------------|-------|
 | empty | Full project scan (default). |
 | `update` | Re-scan and reconcile against the existing `.crew.rc` (see **Update Mode**). |
-| a single key (e.g. `test-cmd`, `agent-ready-label`, `start-cmd`, `isolation-scheme`, `worktree-layout`) | Re-detect or ask for just that one value (see **Update Mode**). |
+| a single key (e.g. `test-cmd`, `agent-ready-label`, `instructions-label`, `start-cmd`, `isolation-scheme`, `worktree-layout`) | Re-detect or ask for just that one value (see **Update Mode**). |
 
 ## Steps
 
@@ -143,6 +143,14 @@ The loop picks up open issues carrying an agent-ready label; the default is `age
 - `findings-assignee` (optional) — ask *"Assign `crew:findings`' follow-up tickets to a GitHub user? (a username, or none)"*; default to the onboarding user or `none`, and record it.
 - `mr-reviewer` (optional) — the GitHub user `/crew:run` requests as reviewer on each finished MR; default to the onboarding user or `none`, and record it.
 
+#### The planning labels (`/crew:pro`)
+
+`/crew:pro` turns a rough ticket carrying an `instructions` label into a granular board, filing the tickets it plans under `agent-planned` (the gate the human promotes to `agent-ready` from) and grouping a large feature under an `epic` parent; the defaults are `instructions` / `agent-planned` / `epic`.
+
+- Check each: `gh label list --search instructions` / `--search agent-planned` / `--search epic`; if the project uses other conventions, ask and substitute.
+- Record them as `instructions-label`, `planned-label`, and `epic-label` (offer to create any that are missing in **Step 13**).
+- These three are independent of `agent-ready-label` — `/crew:pro` plans the `instructions` queue and files `agent-planned`; the human then promotes `agent-planned` → `agent-ready`, which is the `/crew:run` queue.
+
 #### The board (optional)
 
 A GitHub Projects-v2 board is optional: if present the loop reads and moves cards through it; if absent it falls back to label-only selection.
@@ -180,6 +188,7 @@ Map each of the four named states the loop needs to a real column on the chosen 
 You will not:
 
 - Reuse `agent-ready` as the review-followup label — the loop would auto-pick the follow-ups it files.
+- Reuse `agent-ready` or `agent-planned` as the `instructions` label — `/crew:pro` would pick up its own output or skip the promotion gate; keep the three planning labels distinct from each other and from `agent-ready`.
 - Assume the board's column names — they vary per board, so read them with `gh project field-list` and map to the real strings.
 - Treat "no board" as a blocker — label-only selection is a supported mode (`board: none`).
 - Use the same-named empty-shell Priority field a project may expose (`gh project field-list` reports `options: []` for it) — the real values live on the issue.
@@ -366,6 +375,9 @@ The file is JSONC (JSON with `//` comments) at the repo root, everything nested 
     "e2e-cmd": "npx playwright test",
     "e2e-framework": "playwright",
     "agent-ready-label": "agent-ready",
+    "instructions-label": "instructions",     // /crew:pro input — the rough ticket it plans
+    "planned-label": "agent-planned",         // /crew:pro gate — planner files here; human promotes to agent-ready
+    "epic-label": "epic",                     // /crew:pro epic parent for a large feature group
     "review-followup-label": "review-followup",
     "findings-assignee": "none",          // a GitHub user, or none
     "mr-reviewer": "none",                // a GitHub user, or none
@@ -435,6 +447,8 @@ After writing, surface the gaps that will bite the loop so the user can decide, 
 | Gap | Advice |
 |-----|--------|
 | No `agent-ready` label yet | Offer to create it: `gh label create <label> --color 0E8A16 --description "Ready for the crew loop"` — the loop needs at least one labeled issue to do anything. |
+| No `instructions` label yet | Offer to create it: `gh label create <instructions-label> --color FBCA04 --description "Rough ticket for /crew:pro to plan into a board"` — `/crew:pro` plans tickets carrying it (and without it you can't mark one). |
+| No `agent-planned` / `epic` label yet | `/crew:pro`'s planner self-creates `agent-planned` (and `epic` when a large feature needs it) at runtime, but offer to pre-create them: `gh label create <planned-label> --color C5DEF5 --description "Planned by /crew:pro — promote to agent-ready"`. |
 | No `review-followup` label yet | Offer to create it: `gh label create <review-followup-label> --color 5319E7 --description "Review follow-up from crew — small, MR-blocked backlog"` — without it `crew:findings` can't tag its follow-ups. |
 | No board | Fine — the loop runs label-only (oldest agent-ready issue first) and won't move cards; mention a board adds visible TODO → In review tracking and an escalation column. |
 | No e2e framework | Warn that `crew:qa` extends a whole-app e2e suite and has nothing to extend; suggest Playwright or Cypress without installing it. |
@@ -462,7 +476,7 @@ Summarize the run in a few lines.
 4. **Worktree** — `bare-clone` (migrated/validated) or `standard`.
 5. **Stack** — `start-cmd`, readiness signal, isolation scheme; validated / failed / `none`.
 6. **Gaps** — the advisories from Step 13.
-7. **Next** — "Label an issue `agent-ready`, then start the loop with `/crew:run`."
+7. **Next** — either label an issue `agent-ready` and start `/crew:run`, or label a rough ticket `instructions` and run `/crew:pro` to plan it into a board (then promote the tickets you want).
 
 ---
 
@@ -479,7 +493,7 @@ When invoked with `update` or a specific key, take the lighter, non-full-scan pa
 
 ## Workflow Configuration
 
-`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the optional `crew-identity` block (§4.17) — then leaves only a MUST-READ pointer in `CLAUDE.md` (Step 12).
+`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `instructions-label` / `planned-label` / `epic-label` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the optional `crew-identity` block (§4.17) — then leaves only a MUST-READ pointer in `CLAUDE.md` (Step 12).
 
 `.crew.rc` is the single source every component reads instead of guessing — never hardcode an org, repo, board, label, column, or command into any crew file.
 
@@ -493,7 +507,7 @@ The hard boundaries on every run.
 
 - Confirm GitHub auth and a default repo (Step 1) before writing anything — the loop is GitHub-driven.
 - Detect commands from actual project files, then run them to validate (Step 5).
-- Capture the full ticket-source + merge contract: `agent-ready-label`, `review-followup-label`, the board statuses (incl. `status-done` and a needs-human/blocked column), the `priority-field` (§4.5), `branch-convention`, and `merge-method`.
+- Capture the full ticket-source + merge contract: `agent-ready-label`, the `/crew:pro` planning labels (`instructions-label` / `planned-label` / `epic-label`), `review-followup-label`, the board statuses (incl. `status-done` and a needs-human/blocked column), the `priority-field` (§4.5), `branch-convention`, and `merge-method`.
 - Capture the stack-run config (`start-cmd`, `readiness-check`, `port`, `isolation-scheme`) and validate it by bringing the stack up under an issue-derived isolation and tearing it down.
 - Offer the bare-clone worktree migration only with explicit consent; record `worktree-layout` either way, and preserve the old repo on migration.
 - Offer the optional crew identity (§4.17): on consent, install the token-helper + key per machine and test it (mint a token, confirm repo reach) before recording the block.
