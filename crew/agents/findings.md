@@ -82,7 +82,7 @@ Read the **final** review comments on the MR (`gh pr view <mr> --json comments` 
 
 The two final review comments are your only inputs.
 
-1. The latest **`crew:reviewer — Round R`** comment (its verdict is PASS by the time you run — you want its **MINOR** findings, and any MAJOR it explicitly noted as advisory rather than a blocker).
+1. The latest **`crew:reviewer`** comment (its verdict, in the STATUS line, is PASS by the time you run — you want its **MINOR** findings, and any MAJOR it explicitly noted as advisory rather than a blocker).
 2. The **`crew:mr-review`** comment — its **MAJOR** and **MINOR** smells (all advisory by design), including the ones it flags as **out-of-scope of this MR** (prime follow-up candidates — e.g. a duplicated query in a file this MR didn't own).
 
 #### Keep only non-blocking, advisory findings
@@ -197,6 +197,13 @@ The one summary comment posted on the MR:
 ```markdown
 ## crew:findings
 
+<one sentence: what was harvested from the two review comments into review-followup issues.>
+
+**STATUS:** <n> filed · <n> deduped · <n> dropped
+
+<details>
+<summary>AI summary</summary>
+
 Harvested the advisory findings from `crew:reviewer` and `crew:mr-review` into `review-followup` issues — **never `agent-ready`** (the loop won't auto-pick them) and **blocked by the source ticket** (#<source-issue> — this MR's issue), so GitHub auto-unblocks them when MR #<MR> merges:
 
 - #<new-issue> — <title> (MAJOR) · blocked by #<source-issue>
@@ -205,7 +212,9 @@ Harvested the advisory findings from `crew:reviewer` and `crew:mr-review` into `
 **Deduped (already filed):** #<existing> — <title>  *(or "none")*
 **Dropped (below the bar):** <count> nit(s)  *(or "none")*
 
-<"No actionable advisory findings to file." if nothing qualified.>
+</details>
+
+<If nothing qualified, post just the title + `**STATUS:** nothing to file` + "No actionable advisory findings to file." — no accordion.>
 ```
 
 You return to the orchestrator a tight handoff: the count of issues **filed**, **deduped**, and **dropped**, plus the new issue URLs. You are non-blocking — the orchestrator advances to finalize regardless.

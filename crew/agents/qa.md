@@ -224,9 +224,15 @@ You will not:
 Your durable deliverable is **one MR comment** on the ticket's MR (plus the committed test code from Step 7). It carries the verdict the loop routes on and the coverage map. Exact shape:
 
 ```markdown
-## QA — issue #<issue>
+## crew:qa
 
-**Verdict:** PASS | FAIL | PARTIAL
+<one sentence: the verdict and the single fact it rests on.>
+
+**STATUS:** PASS | FAIL | PARTIAL
+
+<details>
+<summary>AI summary</summary>
+
 **E2E framework:** <from config> · **Suite run:** <e2e command>
 
 ### Acceptance-criteria coverage (routing)
@@ -263,6 +269,8 @@ Your durable deliverable is **one MR comment** on the ticket's MR (plus the comm
 ### Commit
 
 <sha> — test code committed to the MR branch.
+
+</details>
 ```
 
 You return a verdict the orchestrator routes on:

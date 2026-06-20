@@ -216,7 +216,7 @@ Triggered by a reviewer **FAIL** or a **red required check on the MR** (Step 9),
 At the cap, leave full context on the MR and move on — one stuck ticket never stops the queue.
 
 1. Leave the MR as **draft** — do not flip it.
-2. Post an escalation MR comment summarizing the 3 rounds: the recurring findings and why they weren't resolved.
+2. Post an escalation MR comment in the standard collapsible shape: a strict `## crew:run` title, a one-sentence summary, a `**STATUS:** ESCALATED · 3 fix rounds exhausted` line, then an `AI summary` `<details>` accordion holding the per-round detail — the recurring findings and why they weren't resolved (leave blank lines after `</summary>` and before `</details>` so the markdown inside renders).
 3. **Tear down the stack** (Step 12's teardown) and move the card → the **needs-human / blocked** column (board only).
 4. Leave the `progress_log` in place (a human will want it); the escalated ticket's worktree **may be left in place** for a human to inspect.
 5. **Continue to the next ticket** (Step 1).

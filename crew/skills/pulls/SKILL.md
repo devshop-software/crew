@@ -193,7 +193,7 @@ Record the outcome, post one consolidated decision comment, and verify every wri
 
 1. **Confirm the issue actually closed.** If the MR carried `Closes #N`, verify `closingIssuesReferences` listed #N and the issue is now `CLOSED` (FT-8: a malformed keyword silently fails to close); re-fetch to confirm.
 2. **Move the card → `status-done`** (board only) and confirm the move.
-3. **Post ONE consolidated decision comment** (why merged / parked / blocked) — the reader gets a single record of the decision and its reason.
+3. **Post ONE consolidated decision comment** in the standard collapsible shape: a strict `## crew:pulls` title, a one-sentence summary, a `**STATUS:** MERGED | PARKED | BLOCKED` line, then an `AI summary` `<details>` accordion holding the reason and the run/method detail (why merged / parked / blocked, with blank lines after `</summary>` and before `</details>` so the markdown inside renders) — the reader gets a single record of the decision and its reason.
 4. **Verify EVERY write landed (§4.11)** — the merge state, the issue close, the card move, the comment; re-do any that didn't take.
 5. **Optionally harvest leftover advisory findings via `crew:findings`** — but **only when the MR has a `Closes #N` source issue** (findings file follow-ups blocked-by that source issue); no source issue → skip the harvest.
 

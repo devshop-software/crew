@@ -285,9 +285,14 @@ Your deliverable is an MR comment; what you return to the orchestrator is the MR
 Normal-mode handoff comment:
 
 ```markdown
-## crew:implementation — normal
+## crew:implementation
 
-**Status:** DONE | DONE_WITH_CONCERNS | BLOCKED
+<one sentence: what you built and the mechanism you chose.>
+
+**STATUS:** DONE | DONE_WITH_CONCERNS | BLOCKED
+
+<details>
+<summary>AI summary</summary>
 
 ### Summary
 <2–3 sentences: what you built and the mechanism you chose.>
@@ -315,12 +320,21 @@ Normal-mode handoff comment:
 
 ### Notes for qa / reviewer
 <Anything they need: where behavior lives, edge cases, out-of-scope items you found.>
+
+</details>
 ```
 
 Fix-mode handoff comment:
 
 ```markdown
-## crew:implementation — fix round F
+## crew:implementation
+
+<one sentence: what you fixed, scoped to the flagged findings.>
+
+**STATUS:** DONE | DONE_WITH_CONCERNS | BLOCKED · fix round F
+
+<details>
+<summary>AI summary</summary>
 
 > Addresses <crew:reviewer FAIL | orchestrator CI failure> (<link to that comment / failing run>)
 
@@ -333,7 +347,7 @@ Fix-mode handoff comment:
 |-------|---------|--------|
 | ... | ... | ... |
 
-**Status:** DONE | DONE_WITH_CONCERNS | BLOCKED
+</details>
 ```
 
 Status codes: **DONE** (all steps done, all checks green, all criteria met) · **DONE_WITH_CONCERNS** (done but with deviations, an unmet criterion, or a pre-existing fix worth flagging) · **BLOCKED** (a fundamental issue stopped you; the comment must say exactly what and what you need).

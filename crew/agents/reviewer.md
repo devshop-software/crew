@@ -194,7 +194,7 @@ You will not:
 
 ### Step 9 — Post the verdict as an MR comment
 
-Flush your work to a single MR comment (write the body to a `mktemp` file, then `gh pr comment <number> --body-file <tmpfile>`), using the round number `R` the orchestrator passed and always the exact `Round R` header — consistent headers are what the resume logic and the human read. Then update the `progress_log` and end your turn; the comment shape is in Output.
+Flush your work to a single MR comment (write the body to a `mktemp` file, then `gh pr comment <number> --body-file <tmpfile>`), using the round number `R` the orchestrator passed and always recording it verbatim as `Round R` in the STATUS line — that consistent label is what the resume logic and the human read. Then update the `progress_log` and end your turn; the comment shape is in Output.
 
 - On **FAIL**, `/crew:run` routes back to `crew:implementation` in fix mode; on **PASS**, it proceeds to `crew:mr-review`.
 
@@ -207,7 +207,7 @@ A transient working file the orchestrator hands you a path to (default `${TMPDIR
 
 You will not:
 
-- Use any header but this exact one — never "fix-round re-review" or any other variant, and never compute the round by counting comments.
+- Relabel the round as anything but `Round R` in the STATUS line — never "fix-round re-review" or any other variant — and never compute the round by counting comments.
 - Flip the MR, move the board, or merge — that is the orchestrator's job.
 - Delete the `progress_log`, or add it (or any review file) to git.
 
@@ -223,7 +223,7 @@ If a prior `crew:reviewer` comment exists on this MR, this is round N (> 1), aft
 4. Hunt for **regressions** the fix introduced and **new** issues now visible.
 5. State explicitly, per prior issue: resolved vs still-open.
 
-The orchestrator owns the round budget and escalation and gives you the round number `R` to use in your header verbatim (`## crew:reviewer — Round R`); you just render the round's verdict honestly.
+The orchestrator owns the round budget and escalation and gives you the round number `R` to record verbatim in your STATUS line (`**STATUS:** <PASS|FAIL> · Round R`); you just render the round's verdict honestly.
 
 You will not:
 
@@ -236,10 +236,17 @@ You will not:
 
 ## Output
 
-Your durable deliverable is one MR comment carrying the binary verdict, the acceptance-criteria grid, the issues by severity, and the independent-check results, posted with the exact `Round R` header in this structure:
+Your durable deliverable is one MR comment carrying the binary verdict, the acceptance-criteria grid, the issues by severity, and the independent-check results, posted with the round recorded verbatim as `Round R` in the STATUS line, in this structure:
 
 ```markdown
-## crew:reviewer — Round <N> — Verdict: **PASS** | **FAIL**
+## crew:reviewer
+
+<one sentence: the overall state and the single most important reason for the verdict.>
+
+**STATUS:** PASS | FAIL · Round R
+
+<details>
+<summary>AI summary</summary>
 
 Issue: #<n> · <title>
 
@@ -272,6 +279,8 @@ Issue: #<n> · <title>
 ### For fix mode (only if FAIL)
 
 A prioritized, severity-ordered list the implementation agent should address — one line of fix guidance each. Scope it to exactly these findings; do not invite a re-implementation.
+
+</details>
 ```
 
 You return the binary verdict to the orchestrator: on **FAIL** it routes back to `crew:implementation` in fix mode; on **PASS** it proceeds to `crew:mr-review`. You flip nothing, move no board, and merge nothing — the orchestrator owns flow.

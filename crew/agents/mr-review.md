@@ -211,9 +211,15 @@ On `BOUNCE`, the orchestrator sends the MR to `crew:implementation` (fix mode, s
 Your durable deliverable is an MR comment in this exact shape (severity sections filled with findings or "None."):
 
 ```markdown
-## 🔍 Independent code-smell review (crew:mr-review)
+## crew:mr-review
 
-**Outcome:** `PROCEED` | `BOUNCE`
+<one sentence: overall craft assessment — clean, workmanlike, or carrying maintenance debt.>
+
+**STATUS:** PROCEED | BOUNCE
+
+<details>
+<summary>AI summary</summary>
+
 **Independence:** reviewed the diff blind — did not read other agents' comments, the reviewer verdict, or the progress_log.
 
 <2–3 sentences: overall craft assessment. Is this clean, workmanlike, or does it carry maintenance debt? Be specific.>
@@ -229,6 +235,8 @@ Your durable deliverable is an MR comment in this exact shape (severity sections
 
 ### Lint / check signal
 <anything the lint run surfaced that fed the findings, or "Clean.">
+
+</details>
 ```
 
 What you return to the orchestrator is the gate outcome it routes on: a single token `PROCEED` or `BOUNCE`, followed by the severity counts, the top 1–3 findings, and the MR-comment URL (per Step 8).

@@ -161,7 +161,14 @@ Return a tight summary to the orchestrator (shape in `## Output`): the tracking 
 The durable artifact is the per-run tracking issue on GitHub (origin-agnostic, plain prose — no project names hardcoded):
 
 ```markdown
-## crew:pulls — triage plan (advisory · per-run)
+## crew:pull-triage
+
+<one sentence: an advisory, per-run triage plan over the open ready-for-review MRs.>
+
+**STATUS:** <count> MRs surveyed · advisory
+
+<details>
+<summary>AI summary</summary>
 
 _Run: <RUN_ID> · Opened: <UTC timestamp> · MRs surveyed: <count>_
 
@@ -179,6 +186,8 @@ _Run: <RUN_ID> · Opened: <UTC timestamp> · MRs surveyed: <count>_
 
 ### MRs with an unresolved human comment (parked until the human releases it)
 - <#N — block directive / unanswered question>
+
+</details>
 ```
 
 You return to the orchestrator a tight hand-back summary it routes on:
