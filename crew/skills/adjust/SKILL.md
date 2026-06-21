@@ -1,6 +1,6 @@
 ---
 name: adjust
-description: "Onboards a project for the crew loop: scans and validates the toolchain (test / lint / build / e2e / app-start) and the GitHub wiring (ticket + /crew:pro planning labels, board columns, priority field, merge method, optional bot identity), offers a gated bare-clone worktree migration, and writes one `.crew.rc` config file at the repo root (plus a MUST-READ pointer in CLAUDE.md) that every other crew component reads at runtime. Use when the user invokes /crew:adjust."
+description: "Onboards a project for the crew loop: scans and validates the toolchain (test / lint / build / e2e / app-start) and the GitHub wiring (ticket + /crew:pro planning labels, board columns, priority field, merge method, optional bot identity), offers a gated bare-clone worktree migration, writes one `.crew.rc` config file at the repo root (plus a MUST-READ pointer in CLAUDE.md) that every other crew component reads at runtime, and provisions the crew MCP servers (Playwright + design) in a `.mcp.json`. Use when the user invokes /crew:adjust."
 metadata:
   type: regular
   mode: single-execution
@@ -18,6 +18,7 @@ You:
 - Confirm the project is wired to GitHub the way the loop needs — auth, a default remote, the ticket label, and an optional board.
 - Capture the ticket-source, branch, merge, worktree, and stack-run contract that `/crew:run` and `/crew:pulls` act on.
 - Write one `.crew.rc` config file at the repo root — the single source every downstream component reads instead of guessing — and leave a MUST-READ pointer to it in `CLAUDE.md`.
+- Provision the two crew MCP servers (Playwright + design) in a `.mcp.json` at the repo root, so every dispatched agent has the same browser and design tooling.
 - Stay project-agnostic by reading the project in front of you, hardcoding no org, repo, board, framework, or package manager.
 - Record an honest `none` for anything genuinely absent and advise the user about the gap.
 - Present the assembled config for confirmation before writing it.
@@ -35,6 +36,7 @@ Read `$ARGUMENTS` to choose the scope of the run.
 | empty | Full project scan (default). |
 | `update` | Re-scan and reconcile against the existing `.crew.rc` (see **Update Mode**). |
 | a single key (e.g. `test-cmd`, `agent-ready-label`, `instructions-label`, `start-cmd`, `isolation-scheme`, `worktree-layout`) | Re-detect or ask for just that one value (see **Update Mode**). |
+| `mcp` | Re-write just `.mcp.json` with the two crew MCP servers (see **Update Mode**). |
 
 ## Steps
 
@@ -245,13 +247,13 @@ The target structure:
 ```
 
 1. Source the exact V1 mechanics (unchanged): `git -C ~/milion/crew show HEAD:skills/adjust/SKILL.md` (V1's Step 7 / 7W).
-2. Capture state — `REMOTE_URL` ← `git remote get-url origin`; `BASE_BRANCH` ← `base-branch` from the config; identify local-only files to preserve (`.env`, `.env.local`, `.claude/settings.local.json`, `.mcp.json` — anything gitignored/untracked with config); stop if the tree is dirty ("commit or stash first") and warn about pre-existing external worktrees (`git worktree list`) that would go stale.
+2. Capture state — `REMOTE_URL` ← `git remote get-url origin`; `BASE_BRANCH` ← `base-branch` from the config; identify local-only files to preserve (`.env`, `.env.local`, `.claude/settings.local.json` — anything gitignored/untracked with config); stop if the tree is dirty ("commit or stash first") and warn about pre-existing external worktrees (`git worktree list`) that would go stale.
 3. Build the new structure in a temp sibling `<project>-worktree-setup/`:
    - `git clone --bare $REMOTE_URL <project>-worktree-setup/.bare`
    - `git -C <project>-worktree-setup/.bare config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"`
    - `git -C <project>-worktree-setup/.bare worktree add ../main $BASE_BRANCH`
 4. Copy the local-only files identified in step 2 into the new `main/`.
-5. Copy root-level files — `CLAUDE.md`, `.crew.rc`, `.crew.schema.json`, and `.claude/` from `main/` to the project root as real files/dirs, which Claude Code (and every crew component walking up from a worktree's CWD) resolves by walking up from any worktree's CWD.
+5. Copy root-level files — `CLAUDE.md`, `.crew.rc`, `.crew.schema.json`, `.mcp.json`, and `.claude/` from `main/` to the project root as real files/dirs, which Claude Code (and every crew component walking up from a worktree's CWD) resolves by walking up from any worktree's CWD.
 6. `mkdir -p wt` in the new root for per-ticket worktrees.
 7. Swap: `mv <project> <project>-old` then `mv <project>-worktree-setup <project>`.
 8. Report and stop short of deletion: "Migrated to bare-clone layout. Old repo preserved at `<project>-old/`; delete it once verified with `rm -rf <project>-old`."
@@ -268,7 +270,7 @@ If the layout already exists, validate it rather than migrate, and report what w
 1. `.bare/` is a bare repo (`git -C .bare rev-parse --is-bare-repository` → `true`).
 2. `main/` is a valid worktree (`.git` file points into `.bare/worktrees/main`).
 3. Worktree paths are current (`git -C .bare worktree list`); if stale after a rename, `git -C main worktree repair`.
-4. `CLAUDE.md`, `.crew.rc`, `.crew.schema.json`, and `.claude/` exist at the root as real files (copy from `main/` / replace symlinks if not).
+4. `CLAUDE.md`, `.crew.rc`, `.crew.schema.json`, `.mcp.json`, and `.claude/` exist at the root as real files (copy from `main/` / replace symlinks if not).
 5. `wt/` exists (`mkdir -p wt` if missing).
 6. The fetch refspec is set (`git -C .bare config remote.origin.fetch` → `+refs/heads/*:refs/remotes/origin/*`).
 
@@ -357,7 +359,7 @@ You will not:
 
 ### Step 11 — Present the config for confirmation
 
-Assemble the full `.crew.rc` (the `config` object) with real detected values — writing `none` for anything genuinely absent — and show it before writing. Ask **"Does this look right? I can change any value."** and wait.
+Assemble the full `.crew.rc` (the `config` object) with real detected values — writing `none` for anything genuinely absent — together with the `.mcp.json` that provisions the two crew MCP servers, and show both before writing. Ask **"Does this look right? I can change any value."** and wait.
 
 The file is JSONC (JSON with `//` comments) at the repo root, everything nested under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json` for editor linting. It has this shape:
 
@@ -414,19 +416,41 @@ The file is JSONC (JSON with `//` comments) at the repo root, everything nested 
 }
 ```
 
+And the `.mcp.json` written verbatim to the repo root — replacing any existing one wholesale, so call out what that file currently defines before overwriting it:
+
+```json
+{
+  "mcpServers": {
+    "playwright": { "type": "stdio", "command": "npx", "args": ["@playwright/mcp@latest"], "env": {} },
+    "design": { "type": "http", "url": "https://api.anthropic.com/v1/design/mcp" }
+  }
+}
+```
+
 You will not:
 
-- Write the config before the user has seen and confirmed it.
+- Write `.crew.rc` or `.mcp.json` before the user has seen and confirmed them.
 
 ---
 
-### Step 12 — Write `.crew.rc` and the CLAUDE.md pointer
+### Step 12 — Write `.crew.rc`, `.mcp.json`, and the CLAUDE.md pointer
 
-Once confirmed, write `.crew.rc` and its schema sidecar at the repo root, and leave only a MUST-READ pointer in `CLAUDE.md`. V2 keeps no on-disk workflow state — there is no `_workflow/` directory or numbered state docs to scaffold, and the only working file (`progress_log`) lives outside the repo and is created by the agents at runtime.
+Once confirmed, write `.crew.rc` and its schema sidecar at the repo root, provision the two crew MCP servers in `.mcp.json` beside them, and leave only a MUST-READ pointer in `CLAUDE.md`. V2 keeps no on-disk workflow state — there is no `_workflow/` directory or numbered state docs to scaffold, and the only working file (`progress_log`) lives outside the repo and is created by the agents at runtime.
 
 1. Write the confirmed `config` object to `.crew.rc` at the repo root, beside `CLAUDE.md` (the project root in a bare-clone layout), creating it or replacing it wholesale on an update.
 2. Copy the schema sidecar to the same root so the `$schema` pointer resolves for editor linting: `cp "${CLAUDE_PLUGIN_ROOT}/crew.schema.json" .crew.schema.json`.
-3. Write the MUST-READ pointer into `CLAUDE.md` as a `## Workflow Configuration` section, touching only that section — create `CLAUDE.md` if absent, append the section if there is none, or replace only that section if it already exists:
+3. Write `.mcp.json` at the same root, replacing any existing file wholesale, provisioning the two crew MCP servers — Playwright over stdio and the design server over HTTP — that `crew:qa` and `crew:reviewer` drive:
+
+   ```json
+   {
+     "mcpServers": {
+       "playwright": { "type": "stdio", "command": "npx", "args": ["@playwright/mcp@latest"], "env": {} },
+       "design": { "type": "http", "url": "https://api.anthropic.com/v1/design/mcp" }
+     }
+   }
+   ```
+
+4. Write the MUST-READ pointer into `CLAUDE.md` as a `## Workflow Configuration` section, touching only that section — create `CLAUDE.md` if absent, append the section if there is none, or replace only that section if it already exists:
 
    ```markdown
    ## Workflow Configuration
@@ -439,6 +463,7 @@ You will not:
 - Create a `_workflow/` directory, numbered state docs, or a committed `progress_log` — V2 keeps state on GitHub.
 - Write the workflow config values into `CLAUDE.md` itself — they live only in `.crew.rc`; `CLAUDE.md` carries just the pointer.
 - Overwrite anything in `CLAUDE.md` outside the `## Workflow Configuration` pointer section.
+- Write `.mcp.json` anywhere but the repo root (the project root in a bare-clone layout) — it must sit beside `.crew.rc` so every worktree resolves the same MCP servers.
 
 ---
 
@@ -454,6 +479,8 @@ After writing, surface the gaps that will bite the loop so the user can decide, 
 | No `review-followup` label yet | Offer to create it: `gh label create <review-followup-label> --color 5319E7 --description "Review follow-up from crew — small, MR-blocked backlog"` — without it `crew:findings` can't tag its follow-ups. |
 | No board | Fine — the loop runs label-only (oldest agent-ready issue first) and won't move cards; mention a board adds visible TODO → In review tracking and an escalation column. |
 | No e2e framework | Warn that `crew:qa` extends a whole-app e2e suite and has nothing to extend; suggest Playwright or Cypress without installing it. |
+| Playwright MCP needs Node/npx | The `playwright` server in `.mcp.json` starts via `npx @playwright/mcp@latest`; on a machine without Node it won't launch and qa/reviewer fall back to the project's own Playwright runner — install Node or accept the fallback. |
+| MCP servers load next session | `.mcp.json` is read by Claude Code at launch, so the two crew servers (Playwright + design) become available on the next session, not the current one. |
 | No `start-cmd` (stack) | Warn that qa (e2e) and reviewer (Playwright) need the app running; suggest wiring a dev-server or `docker compose` target without fabricating one. |
 | No `isolation-scheme` | Note a per-ticket stack can collide with the dev's local stack (and blocks future parallelism); suggest a port env var and a data namespace knob (`COMPOSE_PROJECT_NAME`, a test schema). |
 | Standard worktree layout | Fine — `/crew:run` adds per-ticket worktrees off the existing checkout; mention the bare-clone migration (Step 8) keeps the repo root clean and is available later via `/crew:adjust worktree-layout`. |
@@ -477,8 +504,9 @@ Summarize the run in a few lines.
 3. **Validated commands** — and any that failed or are missing.
 4. **Worktree** — `bare-clone` (migrated/validated) or `standard`.
 5. **Stack** — `start-cmd`, readiness signal, isolation scheme; validated / failed / `none`.
-6. **Gaps** — the advisories from Step 13.
-7. **Next** — either label an issue `agent-ready` and start `/crew:run`, or label a rough ticket `instructions` and run `/crew:pro` to plan it into a board (then promote the tickets you want).
+6. **MCP** — `.mcp.json` written with the two crew servers (Playwright + design); note if Node/npx is absent.
+7. **Gaps** — the advisories from Step 13.
+8. **Next** — either label an issue `agent-ready` and start `/crew:run`, or label a rough ticket `instructions` and run `/crew:pro` to plan it into a board (then promote the tickets you want).
 
 ---
 
@@ -487,15 +515,16 @@ Summarize the run in a few lines.
 When invoked with `update` or a specific key, take the lighter, non-full-scan path.
 
 1. Read the existing `.crew.rc`.
-2. **Full update** (`update`): re-scan, re-validate the commands and the stack-run config, re-detect label/board/columns, re-check the worktree layout, and present a diff of old → new values before writing.
+2. **Full update** (`update`): re-scan, re-validate the commands and the stack-run config, re-detect label/board/columns, re-check the worktree layout, re-write `.mcp.json`, and present a diff of old → new values before writing.
 3. **Single key**: re-detect just that key (or ask for the value), validate it if it is a command or a stack key (`start-cmd` / `readiness-check` / `isolation-scheme`), and update only that key — `worktree-layout` re-runs **Step 8** (offer/validate, gated).
-4. Write back to `.crew.rc`, replacing only the changed keys and leaving the rest of the `config` object untouched.
+4. **`mcp`**: re-write only `.mcp.json` with the two crew MCP servers (Step 12), leaving `.crew.rc` untouched.
+5. Write back to `.crew.rc`, replacing only the changed keys and leaving the rest of the `config` object untouched.
 
 ---
 
 ## Workflow Configuration
 
-`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `instructions-label` / `planned-label` / `epic-label` / `feature-label-prefix` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the optional `crew-identity` block (§4.17) — then leaves only a MUST-READ pointer in `CLAUDE.md` (Step 12).
+`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `instructions-label` / `planned-label` / `epic-label` / `feature-label-prefix` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the optional `crew-identity` block (§4.17) — then leaves only a MUST-READ pointer in `CLAUDE.md` (Step 12). It also writes a sibling `.mcp.json` at the same root provisioning the two crew MCP servers (Playwright + design) — an onboarding artifact every agent reads directly, not a `.crew.rc` key (Step 12).
 
 `.crew.rc` is the single source every component reads instead of guessing — never hardcode an org, repo, board, label, column, or command into any crew file.
 
@@ -514,6 +543,7 @@ The hard boundaries on every run.
 - Offer the bare-clone worktree migration only with explicit consent; record `worktree-layout` either way, and preserve the old repo on migration.
 - Offer the optional crew identity (§4.17): on consent, install the token-helper + key per machine and test it (mint a token, confirm repo reach) before recording the block.
 - Present the config for confirmation before writing it.
+- Write a `.mcp.json` at the repo root provisioning the two crew MCP servers (Playwright + design) on every onboarding, shown in the Step 11 confirmation before it overwrites any existing file.
 - Record `none` for anything genuinely absent, and advise the user about the gap.
 
 ### DON'T:
@@ -524,6 +554,7 @@ The hard boundaries on every run.
 - Create a `_workflow/` directory, numbered state docs, or a committed `progress_log` — V2 keeps state on GitHub.
 - Write the workflow config into `CLAUDE.md` instead of `.crew.rc`, or overwrite anything in `CLAUDE.md` outside the `## Workflow Configuration` pointer section.
 - Assume board column names — read them with `gh project field-list` and map to the real strings.
+- Write `.mcp.json` without surfacing it in the Step 11 confirmation — it replaces any existing MCP file wholesale, so the user sees it first.
 - Skip the confirmation step, or install hooks without consent.
 
 ---
@@ -542,3 +573,4 @@ If you catch yourself thinking any of these, stop.
 - _"I'll scaffold a `_workflow/` folder like V1 did."_ — STOP. V2 keeps no on-disk state; GitHub (issue, MR, comments, board) is the source of truth.
 - _"I'll just write the config and let the user fix it later."_ — STOP. Present it for confirmation first; a config the user never saw is the one nobody trusts.
 - _"They gave me the App values, I'll write the `crew-identity` block."_ — STOP. Test it first — mint a token and confirm it reaches the repo; a block the helper can't use makes every component hard-stop (§4.17).
+- _"This is a backend/library project, it doesn't need a browser or design MCP."_ — STOP. The two crew MCP servers go into every project's `.mcp.json`; flag a missing Node/npx as a gap (Step 13) rather than skipping the file.
