@@ -294,16 +294,17 @@ Tear down the stack you brought up in Step 5 and verify it's actually gone, beca
 
 #### Finalize the MR
 
-Flip the draft to ready-for-review with green CI (or under a logged outage), request the reviewer, move the card, and remove the worktree.
+Flip the draft to ready-for-review with green CI (or under a logged outage), request the reviewer, move the card and post a one-line ticket update, and remove the worktree.
 
 1. **Flip the MR draft → ready-for-review, then request the reviewer:** `gh pr ready <MR-number>` — **only with all required checks green, or under a logged CI-unavailable outage (Step 9's outage path) with the local-green note posted**; if CI has run since the Step 9 gate, re-confirm green first. Then, if `.crew.rc` sets **`mr-reviewer`**, request that user's review so the finished MR lands in their queue: `gh pr edit <MR-number> --add-reviewer <mr-reviewer>` (verify it registered, §4.11). **Skip the request if `mr-reviewer` is the MR's author** — GitHub forbids requesting review from the author (this only happens when crew runs as the user, not under its bot identity §4.17, where the author is the bot and the request succeeds).
-2. **Move the card → In review** (board only).
+2. **Move the card → In review, then post a one-line ticket update** (board only). Resolve the card from the **issue's own project item** — `gh issue view <n> --json projectItems` returns its board item id and current status — then set Status → `status-in-review` and verify the move landed (§4.11). Then post a one-line update comment on the issue, drawn from the MR: the ready-for-review MR link and its outcome (reviewer PASS · CI green · mr-review PROCEED), so the finished ticket reads as done even if the board card lags.
 3. **Remove the worktree:** `git worktree remove <worktree-path>` — the **non-forced** form, run sandboxed; it succeeds because a finalized tree holds only *ignored* artifacts (the copied `.env`, build output), which git removes without complaint. If the non-forced removal exceptionally refuses (a genuinely untracked or modified tracked file), **leave the worktree in place and log it** — a later `git worktree prune` / human cleanup reclaims the disk.
 
 You will not:
 
 - Tear down with a plain `kill $(lsof -ti :<port>)` — it can return a single/stale PID and miss the rest of the dev-server process tree (`pnpm → sh → node → next-server`), leaking the server for hours; use `fuser -k <port>/tcp` (or `docker compose -p <project> down`) and confirm the port is free.
 - Flip to ready-for-review over a red required check — red is a fix trigger (Step 9), not an outage.
+- Locate the board card by scanning the whole board — `gh project item-list` is page-limited (it returns only its first page), so a recently-filed issue on a large board looks absent and the card move silently no-ops, stranding the finished ticket in In Progress. Resolve the card from the **issue's own** `projectItems` instead, and never degrade a board-configured run to label-only because a board scan missed the issue — label-only is only for `board: none`.
 - Pass `--force` or fall back to `rm -rf` when removing the worktree — a forced or recursive filesystem delete trips the sandbox's own approval prompt (a separate gate from the permission system, *not* suppressed by `--dangerously-skip-permissions`) and **stalls the entire autonomous run** (§4.10); leave-and-log if the non-forced removal refuses.
 
 ### Step 13 — Loop
