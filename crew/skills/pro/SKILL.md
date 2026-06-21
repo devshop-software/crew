@@ -54,7 +54,7 @@ You will not:
 
 Preflight (above) runs once; **Steps 1–7 are one instruction ticket**, and after Step 7 the loop returns to Step 1. The loop ends when Step 1 finds no actionable `instructions`-labeled ticket (or, with `--issue`, after that single target completes) — go to the Run Summary.
 
-This is an **attended** loop: the `crew:interpreter` phase (Step 4) interviews the user in real time, and the promotion gate (Step 6) presents the digest for the human to promote from. The loop never auto-promotes and never blocks on a zombie — the interview is with a present human.
+This is an **attended** loop: in Step 4 **you interview the user in real time** (bracketed by two non-interactive `crew:interpreter` dispatches — prepare, then write), and the promotion gate (Step 6) presents the digest for the human to promote from. The loop never auto-promotes and never blocks on a zombie — the interview is with a present human.
 
 ---
 
@@ -95,18 +95,20 @@ You will not:
 - Proceed to the interview without the gatherer's map comment present — reconcile from GitHub (§4.18); re-dispatch if it crashed.
 - Let the gatherer run or build the app — it is read-only (its agent file owns that boundary).
 
-### Step 4 — Dispatch the interpreter (attended interview)
+### Step 4 — Interview the user (you ask; the interpreter prepares + writes)
 
-Dispatch `crew:interpreter` **foreground** so the user answers its questions in real time. It interviews the user — leading every question with a code-grounded recommended option — and writes the resolved intent onto the instruction ticket.
+Conduct the interview **yourself** — you are the only one with `AskUserQuestion` and a live user (a dispatched subagent has neither, the FT-36 finding) — bracketed by two `crew:interpreter` dispatches: one to prepare the grounded question set, one to write the resolved intent from the answers.
 
-1. Task: read instruction #<n> + the gatherer's map (URL from Step 3) + the existing milestone list, interview the user (what's needed / why / decisions / boundary / milestone placement / acceptance shape / verification, each with a recommended option), and write the resolved intent as a comment on the instruction ticket.
-2. **Dispatch foreground** (not background) — the interview is interactive; the user answers live.
-3. After it returns: confirm the resolved-intent comment is present on the instruction ticket; capture the chosen milestone.
-4. **Breakpoint `interpret`** → pause here.
+1. **Dispatch `crew:interpreter` in prepare mode** — task: ground on instruction #<n> + the gatherer's map (URL from Step 3) + the existing milestone list, and return a **recommended-option question set** covering the intent dimensions (what's needed / why / decisions / boundary / milestone placement / acceptance shape / verification). It asks nothing and writes nothing.
+2. **Ask the user yourself** via `AskUserQuestion`, using the returned questions — recommended option first (labeled `(Recommended)`), the realistic alternatives, related questions batched; carry answers forward and collect the full decision set.
+3. **Dispatch `crew:interpreter` in write mode** — pass it the collected decision set; task: synthesize + write the resolved-intent comment on the instruction ticket (§4.11-verified).
+4. After it returns: confirm the resolved-intent comment is present on the instruction ticket; capture the chosen milestone.
+5. **Breakpoint `interpret`** → pause here.
 
 You will not:
 
-- Dispatch the interpreter in the background — its interview needs the live attended session (foreground).
+- Expect the interpreter to ask the user — a dispatched subagent has no live user (the FT-36 finding); **you** ask, between the prepare and write dispatches.
+- Skip the prepare dispatch and improvise the questions yourself — the interpreter grounds them in the code; your job is to ask them and to dispatch the write.
 - Proceed to the planner without the resolved-intent comment present — reconcile from GitHub (§4.18).
 
 ### Step 5 — Dispatch the planner (create the board)
@@ -158,19 +160,20 @@ Every phase is dispatched via the Agent tool; this contract is the point of the 
 - **Agent type:** `agent_type: crew:<phase>` (`crew:gatherer`, `crew:interpreter`, `crew:planner`).
 - **Model / effort:** `model: opus`, `effort: ultracode`. The heavy reasoning lives in the agents; you stay thin.
 - **Working directory:** the repo root — there is no per-ticket worktree (the gatherer reads code read-only; the planner only writes to GitHub). Do **not** set `isolation: worktree`.
-- **Foreground vs. background:** dispatch `crew:interpreter` **foreground** (its interview is interactive — the user answers live); `crew:gatherer` and `crew:planner` may run foreground or background, but reconcile their completion from the durable artifact, not the notification.
+- **The interview is yours, not a dispatch:** you run `AskUserQuestion` in your own main loop (Step 4) between the interpreter's two dispatches; the interpreter's **prepare** and **write** dispatches are non-interactive (a subagent has no live user), so dispatch them like any other phase and reconcile from their return / artifact, not the notification. `crew:gatherer` and `crew:planner` likewise reconcile from their durable artifacts.
 
 Each agent prompt must carry:
 
 - The **working directory** (repo root) and the **instruction ticket number**.
 - For **interpreter** and **planner**: the **gatherer's map comment URL** (so they build on the grounding).
 - For **interpreter** and **planner**: the **existing milestone list** (so the milestone is assigned, never invented).
+- For **interpreter write mode**: the **collected decision set** (the user's interview answers) so it synthesizes the resolved intent without re-asking.
 - The relevant **`.crew.rc`** config values (the labels, the priority field, board statuses, the milestone surface).
 - The run's **`RUN_ID`**.
 
 > Do **not** inline the agent's instructions here — the agent files own their own behavior. Your prompt supplies context (the ticket number, the map URL, the milestone list, config) and the handoff contract, nothing more.
 
-**Advancing between phases — reconcile from GitHub; the notification is only a hint (§4.18).** A phase is done when its durable artifact exists on GitHub — the gatherer's map comment, the interpreter's resolved-intent comment, the planner's created tickets — not when a `<task-notification>` arrives (it can be misattributed, late, duplicated, or never fire). On silence past a staleness threshold, reconcile from GitHub: artifact present → advance; agent still alive → wait; agent dead/zombied → re-dispatch. (The interpreter is the exception to background-reconcile — it runs foreground, attended.)
+**Advancing between phases — reconcile from GitHub; the notification is only a hint (§4.18).** A phase is done when its durable artifact exists on GitHub — the gatherer's map comment, the interpreter's resolved-intent comment, the planner's created tickets — not when a `<task-notification>` arrives (it can be misattributed, late, duplicated, or never fire). On silence past a staleness threshold, reconcile from GitHub: artifact present → advance; agent still alive → wait; agent dead/zombied → re-dispatch. (All three agent dispatches — gatherer, interpreter prepare+write, planner — reconcile from their durable artifact; the only foreground, attended step is your own `AskUserQuestion` interview in Step 4, which is not a dispatch.)
 
 ---
 
@@ -218,7 +221,7 @@ Never hardcode an org, repo, board, label, milestone, or column — read them fr
 
 ## Breakpoints
 
-Default: **attended throughout** — the interpreter's interview (Step 4) and the promotion gate (Step 6) are inherent interaction points, not breakpoints. If the invocation includes `--breakpoint <phase>` (`gather` | `interpret` | `plan`), let that phase's subagent finish normally, then:
+Default: **attended throughout** — the interview you run in Step 4 and the promotion gate (Step 6) are inherent interaction points, not breakpoints. If the invocation includes `--breakpoint <phase>` (`gather` | `interpret` | `plan`), let that phase's subagent finish normally, then:
 
 1. Confirm the phase's durable artifact is present on the instruction ticket (the map / the resolved intent / the created tickets).
 2. Report: "Paused after `<phase>` on instruction #<n>. Re-invoke `/crew:pro` to continue." The progress lives on the instruction ticket; Resume picks it back up.
@@ -234,10 +237,10 @@ The hard boundaries on every run.
 
 ### DO:
 
-- Dispatch every phase to a subagent — never survey the code, interview the user, or write tickets in the orchestrator yourself. You read artifacts, present the digest, and run the gate.
+- Dispatch every phase to a subagent — never survey the code, ground or synthesize the intent, or write tickets in the orchestrator yourself. Your hands-on work is the interview-asking (Step 4), reading artifacts, the digest, and the gate.
 - Read `.crew.rc` fresh each run — never hardcode an org, repo, board, label, milestone, or column name.
 - Run the per-instruction pipeline in order: **gatherer → interpreter → planner** (gather first so the interview's recommendations and the plan are code-grounded).
-- Dispatch the **interpreter foreground** — its interview is the attended, interactive core of the skill.
+- **Own the interview yourself** — run `AskUserQuestion` (Step 4) between the interpreter's prepare and write dispatches; a dispatched subagent has no live user (the FT-36 finding), so asking the prepared questions is the one user-facing thing only you can do.
 - Hold the **`agent-planned` gate** — present the planner's digest and promote only on a live human keystroke (§4.12), **blocked-aware** (never promote a ticket with an open `blocked_by`; never double-label).
 - Treat **GitHub as the source of truth** — the gatherer map, the interpreter intent, and the planner tickets are durable comments/issues; resume reads them.
 - **Claim by identity (§4.13)** — stamp the instruction ticket with a `crew:claim` marker, win the earliest-claim tiebreak, and on resume adopt only your own or a dead owner's in-flight ticket.
@@ -248,7 +251,7 @@ The hard boundaries on every run.
 
 ### DON'T:
 
-- Do the planning work in the orchestrator — no code surveying, no interviewing, no ticket writing.
+- Do the planning work in the orchestrator — no code surveying, no intent grounding/synthesis, no ticket writing. (You DO ask the interpreter's prepared questions in Step 4 — that's the one user-facing thing only you can do.)
 - **Auto-promote** — `agent-ready` is written only on a live human keystroke (§4.12); the loop never flips it on its own, and never promotes a blocked ticket.
 - Produce on-disk planning docs (`plans/`, a spec file) — state is GitHub: the instruction ticket's comments and the created issues.
 - Create a worktree, bring up the app stack, or set `isolation: worktree` — the gatherer reads code read-only and nothing is built.
@@ -268,8 +271,8 @@ If you catch yourself thinking any of these, stop.
 - _"I'll add `agent-ready` and leave `agent-planned` on too, it's harmless."_ — STOP. A clean label swap — add `agent-ready`, **remove `agent-planned`** — or the planned-vs-ready legibility contract corrupts (the FT-32 double-label).
 - _"I'll just write these few tickets myself, it's faster than dispatching the planner."_ — STOP. You are the conductor. **Dispatch `crew:planner`**; the decide+write-one-path is its job (and the FT-32 fix).
 - _"Let me interview the user first, then survey the code."_ — STOP. **Gather first.** The interview's recommended options must be code-grounded, so the gatherer runs before the interpreter.
-- _"I'll dispatch the interpreter in the background like the long phases."_ — STOP. The interpreter's interview is **interactive** — dispatch it **foreground** so the user answers live.
-- _"This is an autonomous orchestrator, so I must never ask the user anything."_ — STOP. `/crew:pro` is **attended** — the interpreter interview and the promotion gate are designed interaction points (the never-ask rule applies to `/crew:run` and `/crew:pulls`, not here).
+- _"I'll dispatch the interpreter to interview the user."_ — STOP. A dispatched subagent has **no live user** (`AskUserQuestion` doesn't surface — the FT-36 finding). **You** ask, in your main loop (Step 4), between the interpreter's prepare and write dispatches.
+- _"This is an autonomous orchestrator, so I must never ask the user anything."_ — STOP. `/crew:pro` is **attended** — you asking the interpreter-prepared questions (Step 4) and the promotion gate (Step 6) are designed interaction points (the never-ask rule applies to `/crew:run` and `/crew:pulls`, not here).
 - _"I'll spin up a worktree and the app stack like `/crew:run` does."_ — STOP. Planning builds nothing — the gatherer reads code **read-only**. No worktree, no stack.
 - _"None of the milestones fit, I'll have the planner make a new one."_ — STOP. Milestones are **human-owned** — the planner assigns to an existing one; surface a mismatch, never create one.
 - _"I exported `GH_TOKEN` a step ago, this `gh` call will use it."_ — STOP. A separate Bash call is a fresh shell; pass the token inline on the write (`GH_TOKEN="$(<token-helper>)" gh …`) or it silently posts as your account (#536, §4.17).

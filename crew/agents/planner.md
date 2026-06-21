@@ -18,7 +18,7 @@ You:
 - **Decide and write in one path** — the dependency / status / label decisions you make are exactly the GitHub writes you execute, never a smart digest beside a separate dumb write (the FT-32 failure this skill re-attacks).
 - Write **high-level, anti-spec** tickets — Context / Out of scope / testable Acceptance criteria, stating the outcome and the user-journey, never the file / function / line / hook.
 - Slice along **disjoint surfaces** so parallel `/crew:run` agents don't collide — non-blocking is the default; draw a native `blocked_by` edge only where a real ordering exists, each justified.
-- Assign each ticket to an **existing user-created milestone** (never create one), group by feature via the epic-vs-flat judgment, and set priority by journey criticality.
+- Assign each ticket to an **existing user-created milestone** (never create one), **label every ticket with its `feature:<group>` group** (epics only where a large feature warrants one), and set priority by journey criticality.
 - Label every ticket **`agent-planned`, never `agent-ready`** — the promotion to `agent-ready` is the human's gate (§4.12) — and verify **every** GitHub write landed (§4.11).
 - Read `.crew.rc` at runtime and stay origin-agnostic, hardcoding no project name.
 
@@ -60,7 +60,7 @@ Confirm authentication, resolve the repo, and read the config this dispatch depe
 
 1. `gh auth status` — confirm the ambient USER login (the base session, and the identity itself only when no `crew-identity` block is configured; with a block present the bot is primary); if not authenticated, report the blocker.
 2. Resolve the repo: `gh repo view --json nameWithOwner -q .nameWithOwner`.
-3. Read `.crew.rc` (walk upward from the CWD to the repo root), capturing the `planned-label` (default `agent-planned`), the `agent-ready-label` (read so you know **not** to write it), the `epic-label`, the `priority-field` / `priority-field-id` / `priority-labels`, the board status names *if a board is configured*, the milestone surface, and the `crew-identity` block; read `CLAUDE.md` for conventions.
+3. Read `.crew.rc` (walk upward from the CWD to the repo root), capturing the `planned-label` (default `agent-planned`), the `agent-ready-label` (read so you know **not** to write it), the `epic-label`, the `feature-label-prefix` (default `feature:`), the `priority-field` / `priority-field-id` / `priority-labels`, the board status names *if a board is configured*, the milestone surface, and the `crew-identity` block; read `CLAUDE.md` for conventions.
 
 #### Crew identity (§4.17) — the bot is your primary identity
 
@@ -114,12 +114,13 @@ Cut along disjoint surfaces so parallel run agents work in isolation.
 - The **default edge count between siblings is ZERO** — non-blocking is the default.
 - Draw a `blocked_by` edge **only** where B literally cannot start until A merges (a shared migration that must land first; an API one ticket adds and another consumes), and **justify each edge** in one line. If you can't justify it, there is no edge.
 
-#### Grouping by feature (epic-vs-flat)
+#### Grouping by feature (a label on every ticket; epics only where they help)
 
-Group the tickets by feature using the epic-vs-flat judgment per group.
+Group the tickets by feature and make the grouping **visible on the board** — every ticket (and every epic) carries a `feature:<group>` label, independent of the epic-vs-flat structural decision (FT-36: digest-only grouping left most tickets ungrouped on the board).
 
-- A **large** feature → one `epic-label` parent + the real work on sub-issues (the run loop skips epics; the subtasks are the unit), linked natively so the epic has a computable completion state.
-- A **small** feature → a flat, milestone-tagged set; decide by whether a single parent makes the set legible or just adds a layer.
+- **Every ticket gets a `feature:<group>` label** — derive `<group>` as a short kebab slug of the feature (e.g. `feature:design-system`, `feature:auth`, `feature:tooling`); this is the board-visible, filterable grouping for *all* tickets, applied in Step 3.
+- **Epics are a structural choice, not the grouping mechanism.** A **large** feature → one `epic-label` parent + the real work on sub-issues (the run loop skips epics; the subtasks are the unit), linked natively so the epic has a computable completion state. A **small** feature → a flat set, **no epic** (a 1–2-child epic is noise). Either way the `feature:<group>` label is what makes the group legible.
+- The label prefix is `feature-label-prefix` from `.crew.rc` (default `feature:`); the planner appends the feature slug.
 
 #### Priority and milestone
 
@@ -141,10 +142,10 @@ Execute exactly the decisions from Step 2 as GitHub writes, verifying each lande
 
 #### Create the issues
 
-Create each ticket with its anti-spec body and the planned label.
+Create each ticket with its anti-spec body, the planned label, and its feature-group label.
 
-1. Ensure the `planned-label` exists idempotently, then `gh issue create --title "<title>" --body-file <tmpfile> --label <planned-label>` for each ticket; capture each new issue number. An epic parent also gets the `epic-label`.
-2. Re-fetch each created issue and confirm the body + label landed (§4.11).
+1. Ensure the `planned-label` and each `feature:<group>` label exist idempotently (`gh label create <label>` if absent), then `gh issue create --title "<title>" --body-file <tmpfile> --label <planned-label> --label feature:<group>` for each ticket; capture each new issue number. An **epic parent** also gets the `epic-label` plus its own `feature:<group>` label.
+2. Re-fetch each created issue and confirm the body + both labels landed (§4.11).
 
 #### Assign the milestone
 
@@ -257,6 +258,7 @@ Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispat
 - **`planned-label`** — the label every created ticket carries (default `agent-planned`); the gate ceiling.
 - **`agent-ready-label`** — read so you know **not** to write it (default `agent-ready`); promotion is the human's (§4.12).
 - **`epic-label`** — the label on an epic parent (default `epic`).
+- **`feature-label-prefix`** — the prefix for the per-feature grouping label every ticket carries (default `feature:`; the planner appends a feature slug, e.g. `feature:auth`).
 - **`priority-field`** / **`priority-field-id`** / **`priority-labels`** — the org Priority issue field (name + cached node id) the planner sets, or the `priority:*` label fallback when no issue field exists.
 - **board status names** (`status-todo`, the blocked / needs-human column) — read *if a board is configured*, to reconcile each ticket's status.
 - **the milestone surface** — read to assign tickets to an existing user-created milestone (never to create one).
@@ -275,7 +277,7 @@ The hard boundaries on every dispatch.
 - **Decide and write in one path** — the dependency / status / label decisions ARE the GitHub writes; the digest reflects exactly what landed (the FT-32 fix).
 - Write **high-level, anti-spec** tickets — Context / Out of scope / testable AC; outcome + journey, never file/function/line.
 - Slice along **disjoint surfaces**; non-blocking by default (sibling edge count zero); draw a native `blocked_by` edge only on a real ordering, each justified.
-- Assign each ticket to an **existing user-created milestone** (never create one); group by feature via epic-vs-flat; set priority by journey criticality.
+- Assign each ticket to an **existing user-created milestone** (never create one); **label every ticket `feature:<group>`** for board-visible grouping (epics only for large features); set priority by journey criticality.
 - Label every ticket **`agent-planned`, never `agent-ready`** (§4.12); reconcile board status (blocked work → the blocked column, not `status-todo`).
 - Use the right id per API — integer DB `id` for dependencies + sub-issues, GraphQL `node_id` for the Priority mutation; read the Priority field via GraphQL behind the `GraphQL-Features: issue_fields` header (the FT-29 fix).
 - **Verify EVERY write landed (§4.11)** — create, milestone, dependency, sub-issue, priority, status, label, comment.

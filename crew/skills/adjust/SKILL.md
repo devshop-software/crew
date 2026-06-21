@@ -145,11 +145,12 @@ The loop picks up open issues carrying an agent-ready label; the default is `age
 
 #### The planning labels (`/crew:pro`)
 
-`/crew:pro` turns a rough ticket carrying an `instructions` label into a granular board, filing the tickets it plans under `agent-planned` (the gate the human promotes to `agent-ready` from) and grouping a large feature under an `epic` parent; the defaults are `instructions` / `agent-planned` / `epic`.
+`/crew:pro` turns a rough ticket carrying an `instructions` label into a granular board, filing the tickets it plans under `agent-planned` (the gate the human promotes to `agent-ready` from), grouping a large feature under an `epic` parent, and tagging every ticket with a per-feature `feature:<group>` label; the defaults are `instructions` / `agent-planned` / `epic` / `feature:`.
 
 - Check each: `gh label list --search instructions` / `--search agent-planned` / `--search epic`; if the project uses other conventions, ask and substitute.
 - Record them as `instructions-label`, `planned-label`, and `epic-label` (offer to create any that are missing in **Step 13**).
-- These three are independent of `agent-ready-label` — `/crew:pro` plans the `instructions` queue and files `agent-planned`; the human then promotes `agent-planned` → `agent-ready`, which is the `/crew:run` queue.
+- Record the per-feature grouping prefix as `feature-label-prefix` (default `feature:`); the planner creates each `feature:<group>` label at runtime, so there is nothing to pre-create here.
+- These are independent of `agent-ready-label` — `/crew:pro` plans the `instructions` queue and files `agent-planned`; the human then promotes `agent-planned` → `agent-ready`, which is the `/crew:run` queue.
 
 #### The board (optional)
 
@@ -378,6 +379,7 @@ The file is JSONC (JSON with `//` comments) at the repo root, everything nested 
     "instructions-label": "instructions",     // /crew:pro input — the rough ticket it plans
     "planned-label": "agent-planned",         // /crew:pro gate — planner files here; human promotes to agent-ready
     "epic-label": "epic",                     // /crew:pro epic parent for a large feature group
+    "feature-label-prefix": "feature:",       // /crew:pro per-feature grouping label prefix (planner appends a slug, e.g. feature:auth)
     "review-followup-label": "review-followup",
     "findings-assignee": "none",          // a GitHub user, or none
     "mr-reviewer": "none",                // a GitHub user, or none
@@ -493,7 +495,7 @@ When invoked with `update` or a specific key, take the lighter, non-full-scan pa
 
 ## Workflow Configuration
 
-`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `instructions-label` / `planned-label` / `epic-label` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the optional `crew-identity` block (§4.17) — then leaves only a MUST-READ pointer in `CLAUDE.md` (Step 12).
+`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `instructions-label` / `planned-label` / `epic-label` / `feature-label-prefix` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the optional `crew-identity` block (§4.17) — then leaves only a MUST-READ pointer in `CLAUDE.md` (Step 12).
 
 `.crew.rc` is the single source every component reads instead of guessing — never hardcode an org, repo, board, label, column, or command into any crew file.
 
@@ -507,7 +509,7 @@ The hard boundaries on every run.
 
 - Confirm GitHub auth and a default repo (Step 1) before writing anything — the loop is GitHub-driven.
 - Detect commands from actual project files, then run them to validate (Step 5).
-- Capture the full ticket-source + merge contract: `agent-ready-label`, the `/crew:pro` planning labels (`instructions-label` / `planned-label` / `epic-label`), `review-followup-label`, the board statuses (incl. `status-done` and a needs-human/blocked column), the `priority-field` (§4.5), `branch-convention`, and `merge-method`.
+- Capture the full ticket-source + merge contract: `agent-ready-label`, the `/crew:pro` planning labels (`instructions-label` / `planned-label` / `epic-label` / `feature-label-prefix`), `review-followup-label`, the board statuses (incl. `status-done` and a needs-human/blocked column), the `priority-field` (§4.5), `branch-convention`, and `merge-method`.
 - Capture the stack-run config (`start-cmd`, `readiness-check`, `port`, `isolation-scheme`) and validate it by bringing the stack up under an issue-derived isolation and tearing it down.
 - Offer the bare-clone worktree migration only with explicit consent; record `worktree-layout` either way, and preserve the old repo on migration.
 - Offer the optional crew identity (§4.17): on consent, install the token-helper + key per machine and test it (mint a token, confirm repo reach) before recording the block.
