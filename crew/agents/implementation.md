@@ -110,7 +110,8 @@ Read the conventions and the files the issue implicates, then log your plan.
 
 1. Read `CLAUDE.md` — conventions, architecture notes, and coding standards — alongside the verify commands you already pulled from `.crew.rc` in Step 0.
 2. Explore the codebase — grep/read the files the issue's Context implicates and the 3–8 files most likely to change, deciding the mechanism here grounded in what's actually there.
-3. Log a one-paragraph plan to the `progress_log`: the criteria, the files you expect to touch, the approach you chose.
+3. If the issue touches the app's UI, query the **design MCP** (the `design` server in `.mcp.json`) to retrieve the source-of-truth design (design system, components, intended visuals) to build to.
+4. Log a one-paragraph plan to the `progress_log`: the criteria, the files you expect to touch, the approach you chose.
 
 ---
 

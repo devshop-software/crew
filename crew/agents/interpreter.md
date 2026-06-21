@@ -86,6 +86,7 @@ Read the instruction ticket (the brief) and the gatherer's current-state map so 
 2. Read the gatherer's map comment (URL in the dispatch) — the existing-vs-missing picture, the candidate work boundaries, the ordering constraints.
 3. Read the existing milestone list (`gh api repos/<owner>/<repo>/milestones --jq '.[].title'`) so milestone placement recommends a real one.
 4. If the brief cites a reference (another repo, a design export), read enough of it to ground the recommendations.
+5. If the brief touches the app's UI, query the **design MCP** (the `design` server in `.mcp.json`) for the source-of-truth design (design system, components, intended visuals) to ground the recommendations.
 
 You will not:
 

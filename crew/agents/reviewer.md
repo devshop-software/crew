@@ -135,6 +135,7 @@ Confirm the behaviour and the checks yourself rather than relying on what the pr
 Independently confirm each acceptance criterion by driving the running stack with Playwright — the live application the orchestrator brought up for this ticket (base URL / port in the env; §4.8). This is verification of the live behaviour, distinct from re-running qa's recorded scenarios.
 
 - Use the **Playwright MCP** if it is available; otherwise use the **project's installed Playwright** runner, driving the orchestrator's base URL either way.
+- When a criterion concerns the app's UI, query the **design MCP** (the `design` server in `.mcp.json`) for the source-of-truth design (design system, components, intended visuals) and confirm the built UI matches it.
 - For each acceptance criterion, perform the user-facing actions it describes and observe the actual outcome (navigation, rendered state, network/result), capturing the concrete observation (what you did, what you expected, what actually happened).
 - A criterion that cannot be made to pass in the browser is a FAIL — at minimum a MAJOR finding, regardless of what the diff, the implementation comment, or qa's coverage map claims.
 

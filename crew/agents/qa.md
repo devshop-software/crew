@@ -102,6 +102,7 @@ Learn the *one* suite you are extending before writing or changing anything — 
 2. **Survey the test files** — read 2–3 representative `.spec.ts` (or equivalent) to learn imports, file layout, page objects, fixtures, helpers, assertion style, and exactly how each `test(...)` block links to its Gherkin scenario (scenario-title comment above the block, Gherkin-step comments inline).
 3. **Map the ticket onto an existing journey** — for each user-observable criterion, find the journey a real user would traverse to encounter the behavior; that journey's existing scenario/file is where the coverage lands. Consider a new scenario only if no existing journey can host it, and a new file only if no existing `.feature` anchors the capability (see Step 5).
 4. **Use a browser MCP to explore, not to test** — if a Playwright (or other) MCP browser is configured (check `.mcp.json`), use it to explore the running app and generate accurate locators before writing tests.
+5. **Consult the design MCP for the intended design** — when a criterion concerns the app's UI, query the **design MCP** (the `design` server in `.mcp.json`) for the source-of-truth design (design system, components, intended visuals) to ground the coverage.
 
 You will not:
 

@@ -87,6 +87,7 @@ Read the enriched instruction ticket and the gatherer's map so the decomposition
 1. `gh issue view <instruction#> --json title,body,labels,comments` — read the `crew:interpreter` resolved-intent comment (what's needed, why, decisions, boundary, the chosen milestone, acceptance shape, verification).
 2. Read the `crew:gatherer` map comment — the existing-vs-missing picture, the candidate boundaries, the ordering constraints.
 3. Confirm the chosen milestone exists in the milestone list (it should — the interpreter recommended an existing one); if it somehow does not, surface it in your hand-back rather than creating it.
+4. If the brief touches the app's UI, query the **design MCP** (the `design` server in `.mcp.json`) for the source-of-truth design (design system, components, intended visuals) to ground the slicing — still never specifying a visual in a ticket (anti-spec).
 
 You will not:
 
