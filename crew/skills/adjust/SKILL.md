@@ -145,6 +145,13 @@ The loop picks up open issues carrying an agent-ready label; the default is `age
 - `findings-assignee` (optional) — ask *"Assign `crew:findings`' follow-up tickets to a GitHub user? (a username, or none)"*; default to the onboarding user or `none`, and record it.
 - `mr-reviewer` (optional) — the GitHub user `/crew:run` requests as reviewer on each finished MR; default to the onboarding user or `none`, and record it.
 
+#### The UI-review label
+
+A ticket carrying this optional label gets the `crew:ui-review` visual-fidelity gate — it drives the built UI against the design the design MCP serves, before `crew:findings`; the default is `ui`, and the gate is off for any ticket without it.
+
+- Check whether it exists: `gh label list --search ui`; substitute if the project uses another name, or set `ui-label: none` to disable the gate entirely (e.g. a backend/library project with no UI).
+- Record the chosen name as `ui-label` (offer to create it in **Step 13**).
+
 #### The planning labels (`/crew:pro`)
 
 `/crew:pro` turns a rough ticket carrying an `instructions` label into a granular board, filing the tickets it plans under `agent-planned` (the gate the human promotes to `agent-ready` from), grouping a large feature under an `epic` parent, and tagging every ticket with a per-feature `feature:<group>` label; the defaults are `instructions` / `agent-planned` / `epic` / `feature:`.
@@ -378,6 +385,7 @@ The file is JSONC (JSON with `//` comments) at the repo root, everything nested 
     "e2e-cmd": "npx playwright test",
     "e2e-framework": "playwright",
     "agent-ready-label": "agent-ready",
+    "ui-label": "ui",                         // UI-gate: tickets with it get the crew:ui-review visual-fidelity gate (or none)
     "instructions-label": "instructions",     // /crew:pro input — the rough ticket it plans
     "planned-label": "agent-planned",         // /crew:pro gate — planner files here; human promotes to agent-ready
     "epic-label": "epic",                     // /crew:pro epic parent for a large feature group
@@ -439,7 +447,7 @@ Once confirmed, write `.crew.rc` and its schema sidecar at the repo root, provis
 
 1. Write the confirmed `config` object to `.crew.rc` at the repo root, beside `CLAUDE.md` (the project root in a bare-clone layout), creating it or replacing it wholesale on an update.
 2. Copy the schema sidecar to the same root so the `$schema` pointer resolves for editor linting: `cp "${CLAUDE_PLUGIN_ROOT}/crew.schema.json" .crew.schema.json`.
-3. Write `.mcp.json` at the same root, replacing any existing file wholesale, provisioning the two crew MCP servers — Playwright over stdio and the design server over HTTP — that `crew:qa` and `crew:reviewer` drive:
+3. Write `.mcp.json` at the same root, replacing any existing file wholesale, provisioning the two crew MCP servers — Playwright over stdio and the design server over HTTP — that the crew agents drive (`crew:qa` / `crew:reviewer` / `crew:ui-review`):
 
    ```json
    {
@@ -477,6 +485,7 @@ After writing, surface the gaps that will bite the loop so the user can decide, 
 | No `instructions` label yet | Offer to create it: `gh label create <instructions-label> --color FBCA04 --description "Rough ticket for /crew:pro to plan into a board"` — `/crew:pro` plans tickets carrying it (and without it you can't mark one). |
 | No `agent-planned` / `epic` label yet | `/crew:pro`'s planner self-creates `agent-planned` (and `epic` when a large feature needs it) at runtime, but offer to pre-create them: `gh label create <planned-label> --color C5DEF5 --description "Planned by /crew:pro — promote to agent-ready"`. |
 | No `review-followup` label yet | Offer to create it: `gh label create <review-followup-label> --color 5319E7 --description "Review follow-up from crew — small, MR-blocked backlog"` — without it `crew:findings` can't tag its follow-ups. |
+| No `ui` label yet | Offer to create it: `gh label create <ui-label> --color 1D76DB --description "UI ticket — gets the crew:ui-review visual-fidelity gate"` — tickets carrying it are verified against the design MCP before findings (skip if `ui-label: none`). |
 | No board | Fine — the loop runs label-only (oldest agent-ready issue first) and won't move cards; mention a board adds visible TODO → In review tracking and an escalation column. |
 | No e2e framework | Warn that `crew:qa` extends a whole-app e2e suite and has nothing to extend; suggest Playwright or Cypress without installing it. |
 | Playwright MCP needs Node/npx | The `playwright` server in `.mcp.json` starts via `npx @playwright/mcp@latest`; on a machine without Node it won't launch and qa/reviewer fall back to the project's own Playwright runner — install Node or accept the fallback. |
@@ -524,7 +533,7 @@ When invoked with `update` or a specific key, take the lighter, non-full-scan pa
 
 ## Workflow Configuration
 
-`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `instructions-label` / `planned-label` / `epic-label` / `feature-label-prefix` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the optional `crew-identity` block (§4.17) — then leaves only a MUST-READ pointer in `CLAUDE.md` (Step 12). It also writes a sibling `.mcp.json` at the same root provisioning the two crew MCP servers (Playwright + design) — an onboarding artifact every agent reads directly, not a `.crew.rc` key (Step 12).
+`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `ui-label` / `instructions-label` / `planned-label` / `epic-label` / `feature-label-prefix` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the optional `crew-identity` block (§4.17) — then leaves only a MUST-READ pointer in `CLAUDE.md` (Step 12). It also writes a sibling `.mcp.json` at the same root provisioning the two crew MCP servers (Playwright + design) — an onboarding artifact every agent reads directly, not a `.crew.rc` key (Step 12).
 
 `.crew.rc` is the single source every component reads instead of guessing — never hardcode an org, repo, board, label, column, or command into any crew file.
 

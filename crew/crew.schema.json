@@ -26,6 +26,7 @@
         "e2e-framework": { "type": "string", "description": "Detected e2e framework (e.g. playwright / cypress / pytest), or `none`." },
 
         "agent-ready-label": { "type": "string", "description": "The label /crew:run filters open issues on — the queue and kill switch (default agent-ready)." },
+        "ui-label": { "type": "string", "description": "Optional label that turns on the crew:ui-review visual-fidelity gate for a ticket (run Step 10b, before findings) — the UI is verified against the design MCP; default ui, or none to disable." },
         "instructions-label": { "type": "string", "description": "The label /crew:pro plans from — a rough, milestone-sized instruction ticket it turns into a granular board (default instructions)." },
         "planned-label": { "type": "string", "description": "The gate label /crew:pro's planner files created tickets under — never agent-ready; the human promotes (default agent-planned)." },
         "epic-label": { "type": "string", "description": "The label /crew:pro's planner applies to an epic parent for a large feature group; the run loop skips epics (default epic)." },
