@@ -60,7 +60,7 @@ Confirm authentication, resolve the repo, and read the config this dispatch depe
 
 1. `gh auth status` — confirm the ambient USER login (the base session, and the identity itself only when no `crew-identity` block is configured; with a block present the bot is primary); if not authenticated, report the blocker.
 2. Resolve the repo: `gh repo view --json nameWithOwner -q .nameWithOwner`.
-3. Read `.crew.rc` (walk upward from the CWD to the repo root), capturing the `planned-label` (default `agent-planned`), the `agent-ready-label` (read so you know **not** to write it), the `epic-label`, the `feature-label-prefix` (default `feature:`), the `priority-field` / `priority-field-id` / `priority-labels`, the board status names *if a board is configured*, the milestone surface, and the `crew-identity` block; read `CLAUDE.md` for conventions.
+3. Read `.crew.rc` (walk upward from the CWD to the repo root), capturing the `planned-label` (default `agent-planned`), the `agent-ready-label` (read so you know **not** to write it), the `epic-label`, the `feature-label-prefix` (default `feature:`), the `ui-label` (default `ui`, `none` if the project disabled the gate), the `priority-field` / `priority-field-id` / `priority-labels`, the board status names *if a board is configured*, the milestone surface, and the `crew-identity` block; read `CLAUDE.md` for conventions.
 
 #### Crew identity (§4.17) — the bot is your primary identity
 
@@ -114,6 +114,7 @@ Cut along disjoint surfaces so parallel run agents work in isolation.
 
 - The **default edge count between siblings is ZERO** — non-blocking is the default.
 - Draw a `blocked_by` edge **only** where B literally cannot start until A merges (a shared migration that must land first; an API one ticket adds and another consumes), and **justify each edge** in one line. If you can't justify it, there is no edge.
+- **Cleave UI from non-UI** — keep visual work (a page, a component, design tokens, layout, styling) in its own tickets, separate from backend/logic, so each UI ticket can carry the `ui-label` and be graded as a coherent whole route by `crew:ui-review`.
 
 #### Grouping by feature (a label on every ticket; epics only where they help)
 
@@ -122,6 +123,13 @@ Group the tickets by feature and make the grouping **visible on the board** — 
 - **Every ticket gets a `feature:<group>` label** — derive `<group>` as a short kebab slug of the feature (e.g. `feature:design-system`, `feature:auth`, `feature:tooling`); this is the board-visible, filterable grouping for *all* tickets, applied in Step 3.
 - **Epics are a structural choice, not the grouping mechanism.** A **large** feature → one `epic-label` parent + the real work on sub-issues (the run loop skips epics; the subtasks are the unit), linked natively so the epic has a computable completion state. A **small** feature → a flat set, **no epic** (a 1–2-child epic is noise). Either way the `feature:<group>` label is what makes the group legible.
 - The label prefix is `feature-label-prefix` from `.crew.rc` (default `feature:`); the planner appends the feature slug.
+
+#### UI tickets carry the `ui-label`
+
+A ticket whose outcome is visual — a page, a component, design tokens, layout, or styling — gets the `ui-label` (from `.crew.rc`, default `ui`), so `/crew:run` runs the `crew:ui-review` measured-fidelity gate on it. The cleave above keeps that visual work in its own ticket, so the label maps to a coherent whole-route surface; a non-visual ticket does not get the label.
+
+- Apply the `ui-label` to each UI ticket in Step 3, alongside `agent-planned` + `feature:<group>`; still anti-spec — the ticket names the outcome and journey, never a font, color, or file.
+- If `ui-label` is `none` (the project disabled the gate), skip it — there is nothing to apply.
 
 #### Priority and milestone
 
@@ -145,8 +153,8 @@ Execute exactly the decisions from Step 2 as GitHub writes, verifying each lande
 
 Create each ticket with its anti-spec body, the planned label, and its feature-group label.
 
-1. Ensure the `planned-label` and each `feature:<group>` label exist idempotently (`gh label create <label>` if absent), then `gh issue create --title "<title>" --body-file <tmpfile> --label <planned-label> --label feature:<group>` for each ticket; capture each new issue number. An **epic parent** also gets the `epic-label` plus its own `feature:<group>` label.
-2. Re-fetch each created issue and confirm the body + both labels landed (§4.11).
+1. Ensure the `planned-label`, each `feature:<group>` label, and the `ui-label` (when a UI ticket needs it) exist idempotently (`gh label create <label>` if absent), then `gh issue create --title "<title>" --body-file <tmpfile> --label <planned-label> --label feature:<group>` for each ticket — adding `--label <ui-label>` on a UI ticket; capture each new issue number. An **epic parent** also gets the `epic-label` plus its own `feature:<group>` label.
+2. Re-fetch each created issue and confirm the body + its labels landed (§4.11).
 
 #### Assign the milestone
 
@@ -260,6 +268,7 @@ Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispat
 - **`agent-ready-label`** — read so you know **not** to write it (default `agent-ready`); promotion is the human's (§4.12).
 - **`epic-label`** — the label on an epic parent (default `epic`).
 - **`feature-label-prefix`** — the prefix for the per-feature grouping label every ticket carries (default `feature:`; the planner appends a feature slug, e.g. `feature:auth`).
+- **`ui-label`** — the visual-gate label the planner applies to UI tickets (default `ui`, `none` if disabled); `/crew:run` runs the `crew:ui-review` measured-fidelity gate on tickets carrying it.
 - **`priority-field`** / **`priority-field-id`** / **`priority-labels`** — the org Priority issue field (name + cached node id) the planner sets, or the `priority:*` label fallback when no issue field exists.
 - **board status names** (`status-todo`, the blocked / needs-human column) — read *if a board is configured*, to reconcile each ticket's status.
 - **the milestone surface** — read to assign tickets to an existing user-created milestone (never to create one).
@@ -279,6 +288,7 @@ The hard boundaries on every dispatch.
 - Write **high-level, anti-spec** tickets — Context / Out of scope / testable AC; outcome + journey, never file/function/line.
 - Slice along **disjoint surfaces**; non-blocking by default (sibling edge count zero); draw a native `blocked_by` edge only on a real ordering, each justified.
 - Assign each ticket to an **existing user-created milestone** (never create one); **label every ticket `feature:<group>`** for board-visible grouping (epics only for large features); set priority by journey criticality.
+- **Cleave UI work into its own tickets and label them `ui`** so `/crew:run`'s `crew:ui-review` gate grades each as a whole route — still anti-spec, never naming a visual.
 - Label every ticket **`agent-planned`, never `agent-ready`** (§4.12); reconcile board status (blocked work → the blocked column, not `status-todo`).
 - Use the right id per API — integer DB `id` for dependencies + sub-issues, GraphQL `node_id` for the Priority mutation; read the Priority field via GraphQL behind the `GraphQL-Features: issue_fields` header (the FT-29 fix).
 - **Verify EVERY write landed (§4.11)** — create, milestone, dependency, sub-issue, priority, status, label, comment.
@@ -308,6 +318,7 @@ If you catch yourself thinking any of these, stop.
 - _"These look ready — I'll just label them `agent-ready` so the run loop can start."_ — STOP. You file **`agent-planned`**; `agent-ready` is the human's gate (§4.12). Never write it.
 - _"I'll name the file and function in the AC so the run agent doesn't have to figure it out."_ — STOP. That's the **anti-spec failure** crew bans. State the outcome + journey; the `opus`/`ultracode` run agent reads the code and decides HOW.
 - _"None of the milestones fit perfectly — I'll create a cleaner one."_ — STOP. Milestones are **human-owned**. Assign to the existing one the interpreter resolved; surface a mismatch, never create one.
+- _"This ticket does the dashboard page and its data layer together."_ — STOP. Cleave the visual work onto its own `ui`-labelled ticket so `crew:ui-review` grades it as a whole route; a blended ticket either escapes the gate or drags ungradeable logic through it.
 - _"I'll chain these two siblings with `blocked_by` to be safe."_ — STOP. **Non-blocking is the default** (edge count zero). Draw an edge only where B literally can't start until A merges — and justify it.
 - _"The `blocked_by` POST returned, so the dependency is set."_ — STOP. **Verify it landed (§4.11)** — and confirm you used the **integer DB `id`** (`--jq .id`), not the node-id, or it silently no-ops.
 - _"Priority looks empty / unwritable from the ProjectV2 field."_ — STOP. Priority is an **org issue field** — read/write via GraphQL `issueFields` behind the `GraphQL-Features: issue_fields` header, write by **node_id** (the FT-29 trap). Not ProjectV2, not REST `orgs/issue-fields`.
