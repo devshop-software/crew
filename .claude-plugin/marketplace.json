@@ -8,7 +8,7 @@
     {
       "name": "crew",
       "source": "./crew",
-      "description": "Autonomous GitHub-issue-driven dev workflow — plan, build, merge: /crew:pro is the attended planner that turns one rough instruction ticket into a granular agent-planned board (gatherer → interpreter → planner; you promote); /crew:run drives agent-ready issues through implementation, qa, review, mr-review, ui-review (a measured visual-fidelity gate for UI tickets — computed typography + font-load vs the design), and findings subagents to ready-for-review MRs; /crew:pulls is a fully-autonomous merge loop that runs alongside it, merging by default with a human comment as the only brake (pull-triage + merge-judge agents); /crew:adjust onboards a project. Optional GitHub App bot identity (opt-in)."
+      "description": "Autonomous GitHub-issue-driven dev workflow — plan, build, merge: /crew:pro is the attended planner that turns one rough instruction ticket into a granular board grouped under epics (gatherer → interpreter → planner; it interviews you, then auto-promotes the work tickets to agent-ready and closes the instruction ticket); /crew:run drives agent-ready issues through implementation, qa, review, mr-review, ui-review (a measured visual-fidelity gate for UI tickets — computed typography + font-load vs the design), and findings subagents to ready-for-review MRs; /crew:pulls is a fully-autonomous merge loop that runs alongside it, merging by default with a human comment as the only brake (pull-triage + merge-judge agents); /crew:adjust onboards a project. Optional GitHub App bot identity (opt-in)."
     }
   ]
 }
