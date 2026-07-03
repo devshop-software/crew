@@ -5,3 +5,4 @@
 # dev tooling (not part of the shipped plugin)
 node_modules/
 dev/output/
+dev/feedback/

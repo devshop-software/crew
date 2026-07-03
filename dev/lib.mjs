@@ -8,7 +8,7 @@
 // rendered files themselves stay untouched. Dependency-free (Node stdlib only).
 
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, unlinkSync, statSync } from 'node:fs';
-import { join, dirname, resolve, basename } from 'node:path';
+import { join, dirname, resolve, basename, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
@@ -117,6 +117,15 @@ export function discover() {
   return out;
 }
 
+// Which orchestrator an agent belongs to — parsed from the opening "Dispatched by
+// crew:<name>" of its own description. That self-declared owner is the faithful
+// signal; grepping an orchestrator body is noisier (it name-drops sibling agents as
+// context — e.g. `pulls` mentions `crew:reviewer` without dispatching it).
+function dispatchOwner(description) {
+  const m = (description || '').match(/dispatched by\s+crew:([a-z][a-z-]*)/i);
+  return m ? m[1] : '';
+}
+
 // ── render ──────────────────────────────────────────────────────────────────
 
 function runRender(args, label) {
@@ -172,15 +181,34 @@ export function buildAll({ quiet = false } = {}) {
     if (!quiet) console.log(`  rendered ${('template/' + t.type).padEnd(12)} ${basename(t.src)} → ${t.outName}.html`);
   }
 
-  // normalize to card descriptors the chrome pages share
+  // normalize to card descriptors the chrome pages share. sourcePath (relative to
+  // the workspace root) + the agent's dispatch owner ride along: the dev server reads
+  // them from manifest.json to resolve a browser annotation back to the file it must
+  // edit, and the index uses `orchestrator` to filter the agent grid.
   const crewCards = crew.map((e) => ({
-    file: `${e.name}.html`, display: e.name, badge: TYPE_LABEL[e.type], type: e.type, description: e.description, tab: 'crew',
+    file: `${e.name}.html`, display: e.name, badge: TYPE_LABEL[e.type], type: e.type,
+    description: e.description, tab: 'crew',
+    sourcePath: relative(WORKSPACE, e.file),
+    orchestrator: e.type === 'agent' ? dispatchOwner(e.description) : '',
   }));
   const tplCards = templates.map((t) => ({
-    file: `${t.outName}.html`, display: t.type, badge: 'Template', type: t.type, description: t.description, tab: 'templates',
+    file: `${t.outName}.html`, display: t.type, badge: 'Template', type: t.type,
+    description: t.description, tab: 'templates',
+    sourcePath: relative(WORKSPACE, t.src),
+    orchestrator: '',
   }));
 
   pruneStale([...crewCards, ...tplCards].map((c) => c.file));
+
+  // manifest — page filename → its source path + metadata. The dev server (serve.mjs)
+  // reads this to map a browser annotation's page back to the source file to edit, and
+  // to decide which pages get the annotator injected (component pages, not the chrome).
+  const manifest = {};
+  for (const c of [...crewCards, ...tplCards]) {
+    manifest[c.file] = { sourcePath: c.sourcePath, display: c.display, type: c.type, tab: c.tab };
+  }
+  writeFileSync(join(OUT_DIR, 'manifest.json'), JSON.stringify(manifest, null, 2));
+
   writeFileSync(join(OUT_DIR, 'index.html'), renderIndex(crewCards, tplCards));
   writeFileSync(join(OUT_DIR, 'view.html'), renderViewer([...crewCards, ...tplCards]));
   if (!quiet) console.log(`  chrome   index.html + view.html (${crewCards.length} crew · ${tplCards.length} templates)`);
@@ -211,8 +239,10 @@ function renderIndex(crewCards, tplCards) {
 
   const cell = (c, n) => {
     const link = `view.html?p=${encodeURIComponent(c.file)}&amp;tab=${c.tab}`;
+    // only crew agents get filtered — not the agent *template* card (also type 'agent')
+    const orch = (c.type === 'agent' && c.tab === 'crew') ? ` data-orch="${escapeHtml(c.orchestrator || '')}"` : '';
     return `
-            <li class="cell">
+            <li class="cell"${orch}>
               <a class="cell__link" href="${link}">
                 <div class="cell__top">
                   <span class="cell__num">${n}</span>
@@ -225,15 +255,27 @@ function renderIndex(crewCards, tplCards) {
             </li>`;
   };
 
-  const group = (title, range, items) => `
+  const group = (title, range, items, extra = '') => `
         <section class="group">
           <div class="group__head">
             <h2 class="group__title">${escapeHtml(title)}</h2>
             <span class="group__range">${range}</span>
-          </div>
+          </div>${extra}
           <ul class="grid">${items}
           </ul>
         </section>`;
+
+  // orchestrator filter — a button row above the Agents grid. Client JS (below) hides
+  // agent cells whose data-orch ≠ the picked orchestrator; "All" clears the filter.
+  const orchNames = crewCards.filter((c) => c.type === 'orchestrator').map((c) => c.display);
+  const filterBar = (names) => !names.length ? '' : `
+          <div class="filter" role="group" aria-label="Filter agents by orchestrator">
+            <span class="filter__label">Orchestrator</span>
+            <button class="filter__btn is-active" type="button" data-orch="">All</button>${names
+              .map((nm) => `
+            <button class="filter__btn" type="button" data-orch="${escapeHtml(nm)}">${escapeHtml(nm)}</button>`)
+              .join('')}
+          </div>`;
 
   // crew panel — numbered across the whole crew list, grouped by type
   const crewNum = new Map(crewCards.map((c, i) => [c, pad(i + 1)]));
@@ -242,7 +284,8 @@ function renderIndex(crewCards, tplCards) {
     .filter((g) => g.items.length)
     .map((g) => {
       const range = `${crewNum.get(g.items[0])}–${crewNum.get(g.items[g.items.length - 1])}`;
-      return group(`${TYPE_LABEL[g.t]}s`, range, g.items.map((c) => cell(c, crewNum.get(c))).join(''));
+      const extra = g.t === 'agent' ? filterBar(orchNames) : '';
+      return group(`${TYPE_LABEL[g.t]}s`, range, g.items.map((c) => cell(c, crewNum.get(c))).join(''), extra);
     })
     .join('\n');
 
@@ -304,6 +347,14 @@ ${ROOT_CSS}
     .cell__cta { margin-top: auto; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: var(--red); }
     .empty { margin-top: 28px; color: var(--muted); font-size: 0.9rem; }
 
+    /* orchestrator filter (Agents group) */
+    .filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0 2px; }
+    .filter__label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.16em; font-weight: 700; color: var(--muted); margin-right: 4px; }
+    .filter__btn { appearance: none; font-family: inherit; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.02em; color: var(--muted); background: none; border: 1px solid var(--rule); padding: 5px 13px; cursor: pointer; transition: color .12s linear, background-color .12s linear, border-color .12s linear; }
+    .filter__btn:hover { color: var(--ink); }
+    .filter__btn.is-active { background: var(--red); color: var(--paper); border-color: var(--red); }
+    .cell.is-filtered-out { display: none; }
+
     .colophon { margin-top: clamp(48px, 7vw, 88px); border-top: 4px solid var(--rule); padding-top: 16px; display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
   </style>
 </head>
@@ -357,6 +408,24 @@ ${tplSection}
       });
       window.addEventListener('hashchange', function () { show((location.hash || '').slice(1)); });
       show((location.hash || '').slice(1));
+    })();
+
+    // orchestrator filter — toggle agent cells by their data-orch
+    (function () {
+      var filter = document.querySelector('.filter');
+      if (!filter) return;
+      var cells = Array.prototype.slice.call(document.querySelectorAll('.cell[data-orch]'));
+      filter.addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('.filter__btn') : null;
+        if (!btn) return;
+        var orch = btn.getAttribute('data-orch');
+        filter.querySelectorAll('.filter__btn').forEach(function (b) {
+          b.classList.toggle('is-active', b === btn);
+        });
+        cells.forEach(function (c) {
+          c.classList.toggle('is-filtered-out', !!orch && c.getAttribute('data-orch') !== orch);
+        });
+      });
     })();
   </script>
 </body>

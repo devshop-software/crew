@@ -1,6 +1,6 @@
 ---
 name: adjust
-description: "Onboards a project for the crew loop: scans and validates the toolchain (test / lint / build / e2e / app-start) and the GitHub wiring (ticket + /crew:pro planning labels, board columns, priority field, merge method, optional bot identity), offers a gated bare-clone worktree migration, writes one `.crew.rc` config file at the repo root (plus a MUST-READ pointer in CLAUDE.md) that every other crew component reads at runtime, and provisions the crew MCP servers (Playwright + design) in a `.mcp.json`. Use when the user invokes /crew:adjust."
+description: "Onboards a project for the crew loop: detects and validates the toolchain and GitHub wiring, sets up the required crew bot identity, and writes the single `.crew.rc` config (plus a `.mcp.json`) every other crew component reads. Use when the user invokes /crew:adjust."
 metadata:
   type: regular
   mode: single-execution
@@ -16,7 +16,8 @@ You:
 
 - Scan the project, detect its toolchain, and run each command to confirm it works before recording it.
 - Confirm the project is wired to GitHub the way the loop needs — auth, a default remote, the ticket label, and an optional board.
-- Capture the ticket-source, branch, merge, worktree, and stack-run contract that `/crew:run` and `/crew:pulls` act on.
+- Set up crew's dedicated GitHub App bot as the required identity for all git/GitHub work — onboarding stops if its org-owned App and key aren't in place.
+- Capture the ticket-source, branch, merge, worktree, and stack-run contract the loop acts on.
 - Write one `.crew.rc` config file at the repo root — the single source every downstream component reads instead of guessing — and leave a MUST-READ pointer to it in `CLAUDE.md`.
 - Provision the two crew MCP servers (Playwright + design) in a `.mcp.json` at the repo root, so every dispatched agent has the same browser and design tooling.
 - Stay project-agnostic by reading the project in front of you, hardcoding no org, repo, board, framework, or package manager.
@@ -35,8 +36,6 @@ Read `$ARGUMENTS` to choose the scope of the run.
 |--------------|-------|
 | empty | Full project scan (default). |
 | `update` | Re-scan and reconcile against the existing `.crew.rc` (see **Update Mode**). |
-| a single key (e.g. `test-cmd`, `agent-ready-label`, `instructions-label`, `start-cmd`, `isolation-scheme`, `worktree-layout`) | Re-detect or ask for just that one value (see **Update Mode**). |
-| `mcp` | Re-write just `.mcp.json` with the two crew MCP servers (see **Update Mode**). |
 
 ## Steps
 
@@ -63,7 +62,7 @@ Find out whether the project already carries a `.crew.rc` so a re-run reconciles
 
 1. Look for `.crew.rc` at the repo root, walking upward from CWD until found, as every other component does.
 2. If it exists and `$ARGUMENTS` is empty, ask **"A `.crew.rc` already exists. Update it, or start fresh?"** and wait.
-3. If `$ARGUMENTS` is `update` or a specific key, go to **Update Mode**.
+3. If `$ARGUMENTS` is `update`, go to **Update Mode**.
 4. If you find a legacy `## Workflow Config` block in `CLAUDE.md` but **no** `.crew.rc`, this project was onboarded by an older crew version — say so and onboard it fresh into `.crew.rc` (there is no in-place migration to build).
 
 You will not:
@@ -183,7 +182,7 @@ Map each of the four named states the loop needs to a real column on the chosen 
 
 #### The priority field
 
-`/crew:run` picks the highest-priority `agent-ready` ticket first, oldest within a tier (§4.5); on GitHub, Priority is an org-level *Issue Field* (default options Urgent/High/Medium/Low) stored on the issue, not a Projects-v2 single-select.
+`/crew:run` picks the highest-priority `agent-ready` ticket first, oldest within a tier; on GitHub, Priority is an org-level *Issue Field* (default options Urgent/High/Medium/Low) stored on the issue, not a Projects-v2 single-select.
 
 1. Detect it via the org issue-fields GraphQL behind the `issue_fields` feature header — the REST `orgs/<owner>/issue-fields` path and any Projects-v2 field query both return blank (FT-29):
 
@@ -207,7 +206,7 @@ You will not:
 
 ### Step 7 — Determine the branch convention
 
-Capture how branches are named and what they target, since each ticket gets one branch and one MR. The per-ticket worktree itself is created and owned by `/crew:run`; adjust records only the naming here, and owns the one-time bare-clone infrastructure separately in **Step 8** (§4.1).
+Capture how branches are named and what they target, since each ticket gets one branch and one MR. The per-ticket worktree itself is created and owned by `/crew:run`; adjust records only the naming here, and owns the one-time bare-clone infrastructure separately in **Step 8**.
 
 | Key | Detection |
 |-----|-----------|
@@ -296,7 +295,7 @@ You will not:
 
 ---
 
-### Step 9 — Detect and validate the stack-run config (§4.8)
+### Step 9 — Detect and validate the stack-run config
 
 Both `crew:qa` (e2e) and `crew:reviewer` (Playwright) need the app running, and `/crew:run` — not the agents — brings it up per ticket. So capture how to start the stack, how to know it is ready, and how to keep each ticket's stack from colliding, then validate the recipe by running it.
 
@@ -344,23 +343,23 @@ You will not:
 
 ---
 
-### Step 10 — Crew identity (the bot is the primary identity, §4.17)
+### Step 10 — Crew identity (set up the required bot identity)
 
-The crew bot — a dedicated GitHub App shown as `<slug>[bot]` and natively Approvable by a human — is the **recommended primary identity**: when configured, every component acts as the bot for all git/GitHub work (§4.17), and running under your own account is the fallback. It is still opt-in and gated on a real org-owned App + private key already existing, so recommend it and configure only on an explicit yes.
+The crew bot — a dedicated GitHub App shown as `<slug>[bot]` and natively Approvable by a human — is the **required identity**: every component acts as the bot for all git/GitHub work, so setting it up is a mandatory onboarding step, not an offer. It is gated only on a real org-owned App + private key existing; if they don't, onboarding stops here until the user creates them.
 
-Offer: **"Set up crew's dedicated GitHub App bot as the primary identity (recommended — bot-authored comments/commits, human-Approvable PRs)? Needs an org-owned App + its private key already created; say no to run under your own account instead."** Then gather, broaden, and test before recording:
+Tell the user: **"Crew runs as its own GitHub App bot (bot-authored comments/commits, human-Approvable PRs). This needs an org-owned App and its private key already created — give me the App id and key path, or create them first."** Then gather, broaden, and test before recording:
 
 1. Resolve the values — `app-id` (App settings page); `installation-id` (`gh api /orgs/<owner>/installations --jq '.installations[]|select(.app_slug=="<slug>")|.id'`); the bot git author, name `<slug>[bot]` and email `<bot-user-id>+<slug>[bot]@users.noreply.github.com` (`gh api '/users/<slug>[bot]' --jq .id`).
 2. Place the key + helper per machine, outside any repo — private key at `~/.config/crew/crew.pem` (`chmod 600`), and install the bundled helper `${CLAUDE_PLUGIN_ROOT}/scripts/gh-token.sh` → `~/.config/crew/gh-token.sh` (`chmod +x`).
-3. Advise the **full permission set** so the bot can operate 100% of the time — Repository: Contents, Issues, Pull requests (read & write), Metadata + Checks/Commit statuses (read); Organization: Projects (read & write, for the board) and Members (read), plus issue-field access where the App supports it. Tell the user to grant anything missing on the App settings page; whatever the App genuinely can't be granted (e.g. the org Priority issue-field preview) stays a per-operation **user-login fallback** at runtime.
-4. Test it (mandatory) — mint a token (`CREW_APP_ID=<id> CREW_INSTALLATION_ID=<id> CREW_APP_PRIVATE_KEY_PATH=<path> ~/.config/crew/gh-token.sh`), confirm it reaches the repo (`curl -fsS -H "Authorization: token <token>" https://api.github.com/installation/repositories` lists it), and probe the org-scoped reads the loop relies on under the token (a Projects board read and the Priority issue-field GraphQL) so you know which the bot can do and which fall back to the user.
-5. On a green test, record the `crew-identity` rows (Step 11) and note any operations that will use the user-login fallback; if the mint or the repo-reach fails, report the likely cause (key path / which repos the App is installed on / missing permissions) and leave the loop on the user identity; on decline, record `identity-mode: user` (or omit the block) and the loop runs as the user.
+3. Advise the **full permission set** so the bot can operate 100% of the time — Repository: Contents, Issues, Pull requests (read & write), Metadata + Checks/Commit statuses (read); Organization: Projects (read & write, for the board) and Members (read), plus issue-field access where the App supports it. Tell the user to grant anything missing on the App settings page; whatever GitHub genuinely won't grant any App (e.g. the org Priority issue-field preview) stays a per-operation read the bot performs under the ambient user login at runtime — a platform limit, not an identity choice.
+4. Test it (mandatory) — mint a token (`CREW_APP_ID=<id> CREW_INSTALLATION_ID=<id> CREW_APP_PRIVATE_KEY_PATH=<path> ~/.config/crew/gh-token.sh`), confirm it reaches the repo (`curl -fsS -H "Authorization: token <token>" https://api.github.com/installation/repositories` lists it), and probe the org-scoped reads the loop relies on under the token (a Projects board read and the Priority issue-field GraphQL) so you know which the bot can do and which need the platform-limited user read.
+5. On a green test, record the `crew-identity` block (Step 11) and note any per-operation reads that need the user login. If the mint or the repo-reach fails, stop and report the likely cause (key path / which repos the App is installed on / missing permissions): crew needs its bot, so onboarding does not complete until the App is reachable — there is no run-as-your-own-account path.
 
 You will not:
 
 - Place the private key or helper inside a repo or a worktree-copied `.env` — they live per machine, outside any repo.
-- Record the `crew-identity` block before a green test — a block the helper can't use makes every component hard-stop (§4.17).
-- Frame the bot as a mere add-on — when configured it is the primary identity; the user account is the fallback.
+- Record the `crew-identity` block before a green test — a block the helper can't use makes every component hard-stop.
+- Complete onboarding under your own account when the bot can't be set up — that is a hard stop, not a fallback; onboarding waits for a reachable org-owned App and key.
 
 ---
 
@@ -395,7 +394,7 @@ The file is JSONC (JSON with `//` comments) at the repo root, everything nested 
     "mr-reviewer": "none",                // a GitHub user, or none
     "board": "none",                      // Projects-v2 number / URL, or none
     "priority-field": "Priority",         // or none
-    "priority-field-id": "none",          // the org issue-field node id (IFSS_…) so /crew:run skips re-resolving (§5d), or none
+    "priority-field-id": "none",          // the org issue-field node id (IFSS_…) so /crew:run skips re-resolving, or none
     "status-todo": "TODO",
     "status-in-progress": "In progress",
     "status-in-review": "In review",
@@ -408,18 +407,17 @@ The file is JSONC (JSON with `//` comments) at the repo root, everything nested 
     "start-cmd": "none",                  // e.g. docker compose up, or none
     "readiness-check": "none",            // health URL / port / log pattern, or none
     "port": "none",                       // e.g. 3000, or none
-    "isolation-scheme": "none"            // e.g. PORT = 3000 + (issue# mod 50); COMPOSE_PROJECT_NAME = <repo>-<issue#>, or none
-    // crew-identity (§4.17): OMIT this whole block to run as the ambient user.
-    // When opting into the GitHub App bot (Step 10), add it (key + helper live per machine, outside any repo):
-    // "crew-identity": {
-    //   "identity-mode": "github-app",
-    //   "app-id": "<app id>",
-    //   "installation-id": "<installation id>",
-    //   "private-key-path": "~/.config/crew/crew.pem",
-    //   "token-helper": "~/.config/crew/gh-token.sh",
-    //   "git-author-name": "<slug>[bot]",
-    //   "git-author-email": "<bot-user-id>+<slug>[bot]@users.noreply.github.com"
-    // }
+    "isolation-scheme": "none",           // e.g. PORT = 3000 + (issue# mod 50); COMPOSE_PROJECT_NAME = <repo>-<issue#>, or none
+    // crew-identity: the required GitHub App bot (Step 10) — every component acts as it. Key + helper live per machine, outside any repo.
+    "crew-identity": {
+      "identity-mode": "github-app",
+      "app-id": "<app id>",
+      "installation-id": "<installation id>",
+      "private-key-path": "~/.config/crew/crew.pem",
+      "token-helper": "~/.config/crew/gh-token.sh",
+      "git-author-name": "<slug>[bot]",
+      "git-author-email": "<bot-user-id>+<slug>[bot]@users.noreply.github.com"
+    }
   }
 }
 ```
@@ -493,9 +491,8 @@ After writing, surface the gaps that will bite the loop so the user can decide, 
 | MCP servers load next session | `.mcp.json` is read by Claude Code at launch, so the two crew servers (Playwright + design) become available on the next session, not the current one. |
 | No `start-cmd` (stack) | Warn that qa (e2e) and reviewer (Playwright) need the app running; suggest wiring a dev-server or `docker compose` target without fabricating one. |
 | No `isolation-scheme` | Note a per-ticket stack can collide with the dev's local stack (and blocks future parallelism); suggest a port env var and a data namespace knob (`COMPOSE_PROJECT_NAME`, a test schema). |
-| Standard worktree layout | Fine — `/crew:run` adds per-ticket worktrees off the existing checkout; mention the bare-clone migration (Step 8) keeps the repo root clean and is available later via `/crew:adjust worktree-layout`. |
+| Standard worktree layout | Fine — `/crew:run` adds per-ticket worktrees off the existing checkout; mention the bare-clone migration (Step 8) keeps the repo root clean and is available later via `/crew:adjust update`. |
 | No lint command | Note the implementation/reviewer agents will skip lint checks. |
-| Running as you, not a bot | With no `crew-identity`, crew's comments/commits show under your account; `/crew:adjust` can wire a GitHub App identity (§4.17) so they show as `<slug>[bot]` (and let a human Approve its PRs), which needs an org-owned App + key. |
 | `progress_log` path not ignored | Usually a non-issue (it lives outside the repo); if the configured location ever lands inside the tree, recommend a `.gitignore` entry. |
 | Scope-limiting hooks | If they would help, explain them and let the user decide. |
 
@@ -522,19 +519,18 @@ Summarize the run in a few lines.
 
 ## Update Mode
 
-When invoked with `update` or a specific key, take the lighter, non-full-scan path.
+When invoked with `update`, reconcile the existing `.crew.rc` against a fresh scan instead of onboarding from scratch.
 
 1. Read the existing `.crew.rc`.
-2. **Full update** (`update`): re-scan, re-validate the commands and the stack-run config, re-detect label/board/columns, re-check the worktree layout, re-write `.mcp.json`, and present a diff of old → new values before writing.
-3. **Single key**: re-detect just that key (or ask for the value), validate it if it is a command or a stack key (`start-cmd` / `readiness-check` / `isolation-scheme`), and update only that key — `worktree-layout` re-runs **Step 8** (offer/validate, gated).
-4. **`mcp`**: re-write only `.mcp.json` with the two crew MCP servers (Step 12), leaving `.crew.rc` untouched.
-5. Write back to `.crew.rc`, replacing only the changed keys and leaving the rest of the `config` object untouched.
+2. Re-scan, re-validate the commands and the stack-run config, re-detect the label/board/columns, re-check the worktree layout, and re-write `.mcp.json`.
+3. Present a diff of old → new values before writing.
+4. Write back to `.crew.rc`, replacing only the changed keys and leaving the rest of the `config` object untouched.
 
 ---
 
 ## Workflow Configuration
 
-`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `ui-label` / `ui-fidelity-mode` / `instructions-label` / `planned-label` / `epic-label` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the optional `crew-identity` block (§4.17) — then leaves only a MUST-READ pointer in `CLAUDE.md` (Step 12). It also writes a sibling `.mcp.json` at the same root provisioning the two crew MCP servers (Playwright + design) — an onboarding artifact every agent reads directly, not a `.crew.rc` key (Step 12).
+`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `ui-label` / `ui-fidelity-mode` / `instructions-label` / `planned-label` / `epic-label` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the required `crew-identity` block — then leaves only a MUST-READ pointer in `CLAUDE.md` (Step 12). It also writes a sibling `.mcp.json` at the same root provisioning the two crew MCP servers (Playwright + design) — an onboarding artifact every agent reads directly, not a `.crew.rc` key (Step 12).
 
 `.crew.rc` is the single source every component reads instead of guessing — never hardcode an org, repo, board, label, column, or command into any crew file.
 
@@ -548,10 +544,10 @@ The hard boundaries on every run.
 
 - Confirm GitHub auth and a default repo (Step 1) before writing anything — the loop is GitHub-driven.
 - Detect commands from actual project files, then run them to validate (Step 5).
-- Capture the full ticket-source + merge contract: `agent-ready-label`, the `/crew:pro` planning labels (`instructions-label` / `planned-label` / `epic-label`), `review-followup-label`, the board statuses (incl. `status-done` and a needs-human/blocked column), the `priority-field` (§4.5), `branch-convention`, and `merge-method`.
+- Capture the full ticket-source + merge contract: `agent-ready-label`, the `/crew:pro` planning labels (`instructions-label` / `planned-label` / `epic-label`), `review-followup-label`, the board statuses (incl. `status-done` and a needs-human/blocked column), the `priority-field`, `branch-convention`, and `merge-method`.
 - Capture the stack-run config (`start-cmd`, `readiness-check`, `port`, `isolation-scheme`) and validate it by bringing the stack up under an issue-derived isolation and tearing it down.
 - Offer the bare-clone worktree migration only with explicit consent; record `worktree-layout` either way, and preserve the old repo on migration.
-- Offer the optional crew identity (§4.17): on consent, install the token-helper + key per machine and test it (mint a token, confirm repo reach) before recording the block.
+- Set up the required crew bot identity: install the token-helper + key per machine and test it (mint a token, confirm repo reach) before recording the block, stopping onboarding if the bot can't be reached.
 - Present the config for confirmation before writing it.
 - Write a `.mcp.json` at the repo root provisioning the two crew MCP servers (Playwright + design) on every onboarding, shown in the Step 11 confirmation before it overwrites any existing file.
 - Record `none` for anything genuinely absent, and advise the user about the gap.
@@ -561,6 +557,7 @@ The hard boundaries on every run.
 - Hardcode any org, repo, board, framework, package manager, start command, port, or isolation value — detect each project fresh and read `.crew.rc` at runtime.
 - Invent a command, a board column, or a `start-cmd` that doesn't exist — an honest `none` beats a command that fails mid-run.
 - Run the bare-clone migration without explicit consent, or delete the old repo automatically.
+- Complete onboarding under your own account when the required bot App can't be reached — that is a hard stop, not a fallback.
 - Create a `_workflow/` directory, numbered state docs, or a committed `progress_log` — V2 keeps state on GitHub.
 - Write the workflow config into `CLAUDE.md` instead of `.crew.rc`, or overwrite anything in `CLAUDE.md` outside the `## Workflow Configuration` pointer section.
 - Assume board column names — read them with `gh project field-list` and map to the real strings.
@@ -582,5 +579,6 @@ If you catch yourself thinking any of these, stop.
 - _"I'll migrate to a bare clone since it's cleaner."_ — STOP. The migration rewrites the repo layout — get an explicit yes and never delete the old repo.
 - _"I'll scaffold a `_workflow/` folder like V1 did."_ — STOP. V2 keeps no on-disk state; GitHub (issue, MR, comments, board) is the source of truth.
 - _"I'll just write the config and let the user fix it later."_ — STOP. Present it for confirmation first; a config the user never saw is the one nobody trusts.
-- _"They gave me the App values, I'll write the `crew-identity` block."_ — STOP. Test it first — mint a token and confirm it reaches the repo; a block the helper can't use makes every component hard-stop (§4.17).
+- _"They gave me the App values, I'll write the `crew-identity` block."_ — STOP. Test it first — mint a token and confirm it reaches the repo; a block the helper can't use makes every component hard-stop.
+- _"The bot mint failed / this is a personal repo, I'll just run as the user."_ — STOP. The bot is crew's required identity; onboarding waits for a reachable org-owned App and key — there is no run-as-your-own-account fallback.
 - _"This is a backend/library project, it doesn't need a browser or design MCP."_ — STOP. The two crew MCP servers go into every project's `.mcp.json`; flag a missing Node/npx as a gap (Step 13) rather than skipping the file.
