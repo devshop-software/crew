@@ -130,6 +130,7 @@ Render each reported delta in the block format below, carrying the measured numb
 
 1. Carry each delta's measured `detail` (e.g. "design Schibsted Grotesk 22px, built Inter 24px") and trace the built side to a `path/to/file.ext:line` in the diff.
 2. Keep the comparator's severity — a measured MAJOR blocks under `enforce`; a MINOR is advisory.
+3. When a measured delta falls **outside this ticket's slice** (a whole-route property no single ticket owns), still raise it — mark it **out-of-scope of this ticket, for `crew:findings` to file**. Do not resolve it by asserting a sibling ticket owns it unless you have checked that ticket is **open** and its body **enumerates this exact fix**; if you name a ticket, name a verified one, otherwise say **no ticket owns it**. A confident but unverified "owned by #N" reads as resolved and lets the delta be dropped.
 
 A delta names what the design specifies, what the app renders, and where:
 
@@ -139,6 +140,7 @@ A delta names what the design specifies, what the app renders, and where:
 - Design: the measured/declared design value (token / render ref)
 - Built: the measured built value — `path/to/file.ext:line`
 - Delta: the concrete measured departure
+- Scope: `in-ticket`, or `out-of-scope — for crew:findings to file` (no ticket owns it, or a verified open + enumerating #N — never a bare unverified "owned by #N")
 - Suggested fix: actionable guidance the implementation fix-mode can act on
 ```
 
@@ -151,7 +153,8 @@ You will not:
 
 - Write a delta the comparator did not measure, or hand-wave a "looks off" without the measured numbers.
 - Write a delta without the built `file:line` it traces to and the design value it departs from.
-- Raise a delta for anything the issue marks Out of scope, or for app behavior unrelated to the visuals.
+- Suppress a whole-route *visual* delta measured outside the ticket's slice — raise it, marked out-of-scope for `crew:findings`; the "out of scope" you skip is non-visual/behavioral scope, or app behavior unrelated to the visuals.
+- Attribute an out-of-scope delta to a sibling ticket you have not verified is **open and enumerates the fix** — an unverified "owned by #N" reads as resolved and lets `crew:findings` drop it; mark it unowned instead.
 
 ---
 
@@ -311,6 +314,7 @@ If you catch yourself thinking any of these, stop.
 - _"This ticket only changed the buttons, so I'll just grade the buttons."_ — STOP. Grade the whole assembled route — typography and the font-load fact are page properties no single ticket owns; slicing the grade is how the wrong font shipped past the gate.
 - _"I remember the design uses Schibsted Grotesk, I'll just write that."_ — STOP. The verdict comes from the tool run on the design's actual token file + the live build extract, not from memory or a prior ticket's notes — the gate that cites a design it never fetched is the hole this closes.
 - _"This is close enough, a few pixels off."_ — STOP. Classify it: a small cosmetic gap is MINOR (noted, doesn't block); a clear departure is MAJOR. Cite it either way; don't wave it through.
+- _"This delta is out of scope — it belongs to the shared-X ticket, I'll say so and move on."_ — STOP. Unless you've checked that ticket is **open** and its body **names this exact fix**, say **no ticket owns it — for `crew:findings` to file**. A confident but wrong attribution — an "owned by #N" that points at a closed or non-enumerating ticket — is how a measured delta vanishes.
 - _"No design project obviously matches this app, I'll use the closest one."_ — STOP. Grading against the wrong design is worse than not grading; if none plausibly matches, that is BLOCKED.
 - _"I'll just nudge this style myself while I'm here."_ — STOP. You change no code. Write the delta; the implementation agent fixes it.
 - _"I'll save the screenshots and deltas to a review file."_ — STOP. The verdict is an **MR comment**, not a file.

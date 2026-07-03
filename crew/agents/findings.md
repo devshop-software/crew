@@ -95,25 +95,32 @@ Filter the raw findings down to the ones worth a ticket, and make the filtering 
 
 - **Skip blocking findings** — anything CRITICAL, any reviewer-FAIL item, any `crew:mr-review` `BOUNCE` CRITICAL, any `crew:ui-review` FAIL/BLOCKED delta; those were already fixed in the loop (or escalated).
 - **Skip anything already resolved** — if an earlier-round finding was addressed by a later fix commit, check the latest comment rather than an earlier round's.
+- **Out-of-scope-of-this-MR is a reason to file, not to drop** — a finding a review agent tagged out-of-scope of this MR (a whole-route fidelity delta no ticket owns, a smell in a file this MR didn't touch) is the *definition* of a follow-up; it is a prime candidate for Step 4, never dropped merely because "another ticket will cover it" — that claim is tested in Step 3, and a bare theme match is not ownership.
+- **Judge a runtime/env artifact per-property** — a delta is a droppable env artifact only for the property that is genuinely environment-derived (an env-label string, a version string, a git sha, a host). A *style* property measured on the same element — font-size, colour, tracking, weight, position — is a real design delta; evaluate it on its own and never drop it by association with the env string beside it.
 - **Apply a quality bar** — file findings that are *actionable* and *worth a human's planning attention*; pure nits (a single rename, a one-line style preference the reviewer marked trivial) are not worth a ticket.
 
 You will not:
 
 - Never silently truncate — `log()` what you dropped and why, so the filtering is visible.
 - Never file CRITICAL / blocking findings — they were already fixed in the loop or escalated.
+- Never drop a measured *style* delta because a runtime/env-artifact delta (an env label, a version string) sits on the same element — judge each property on its own.
 
 ---
 
-### Step 3 — Dedup against existing review-followup issues
+### Step 3 — Dedup — only against an open ticket that enumerates the fix
 
-Findings recur across MRs (orphaned i18n keys, the same leaky helper), so dedup before filing anything. Only genuinely new findings proceed to Step 4.
+Findings recur across MRs (orphaned i18n keys, the same leaky helper), so dedup before filing anything — but dedup is valid only against a ticket that will actually *cause* the fix. Only genuinely new findings, and findings whose claimed owner doesn't hold up, proceed to Step 4.
 
 1. List open review-followup issues: `gh issue list --label <review-followup-label> --state open --json number,title,body`.
-2. For each kept finding, check whether an open review-followup issue already covers the **same problem in the same place** (match on the smell + the file/symbol, not exact wording); if so, note in the `progress_log` that it was deduped against issue #N, and optionally add a one-line comment on that existing issue linking this MR as another occurrence.
+2. For each kept finding, check whether an **open** ticket already covers the **same problem in the same place** — either an open `review-followup` issue for the same smell + file/symbol, or another open ticket whose **body enumerates this exact fix as an acceptance criterion**. Match on the smell + the file/symbol, not exact wording.
+3. **Verify the owner before you dedup.** Re-read the candidate ticket and confirm both: it is **open**, and its body **names this exact fix** (quote the enumerating line into the `progress_log`). A ticket that only shares the theme or area ("it's the shared-chrome ticket") does **not** enumerate the fix; a **closed** ticket can never cause it. If the candidate fails either test, the finding is **not** deduped — it proceeds to Step 4 and you file it.
+4. When the owner holds up, note in the `progress_log` that it was deduped against issue #N with the quoted criterion, and optionally add a one-line comment on that issue linking this MR as another occurrence — a comment is a cross-link, never a substitute for the fix being enumerated in an open ticket.
 
 You will not:
 
-- Never file a duplicate of an open `review-followup` issue — note the dedup against issue #N instead.
+- Never file a duplicate of an open `review-followup` issue — note the dedup against issue #N (verified open + enumerating) instead.
+- Never dedup a finding against a **closed** ticket, or against an open ticket that only shares its theme without enumerating the exact fix — that is how a real delta gets handed ticket-to-ticket until it lands on one that never owns it and evaporates; if no open ticket enumerates it, file it (Step 4).
+- Never substitute a comment for a filed issue — recording the measured numbers on a sibling ticket does not track the work; if no open ticket enumerates the fix, file it.
 
 ---
 
@@ -165,10 +172,13 @@ You will not:
 
 Post **one** `crew:findings` comment on the ticket's MR (`gh pr comment <mr> --body-file <tmpfile>`) so the trail shows what was harvested, verify it posted (re-fetch), and append the summary to the `progress_log`. Hand back to the orchestrator the count of issues filed, deduped, and dropped, plus the new issue URLs.
 
+**Account for every finding — the disposition ledger.** Every advisory finding the review agents surfaced ends with exactly one recorded disposition: **filed** (issue #X), **deduped** (into open issue #Y, with the quoted enumerating criterion), or **dropped** (naming the property and the reason — a pure nit, or a genuine runtime/env artifact). The filed + deduped + dropped counts reconcile to the total surfaced; no finding is left with no disposition, and "out of scope of this MR" is never a drop reason. Carry the ledger into the summary comment so nothing can silently evaporate.
+
 You will not:
 
 - Never flip the MR, move the board, or finalize — that is the orchestrator's next step.
 - Never report DONE on an unverified summary comment (§4.11).
+- Never leave a surfaced finding without a recorded disposition — every one is filed, deduped (against a verified open + enumerating owner), or dropped with its property and reason named.
 
 ---
 
@@ -213,8 +223,8 @@ Harvested the advisory findings from `crew:reviewer`, `crew:mr-review`, and (UI 
 - #<new-issue> — <title> (MAJOR) · blocked by #<source-issue>
 - #<new-issue> — <title> (MINOR) · blocked by #<source-issue>
 
-**Deduped (already filed):** #<existing> — <title>  *(or "none")*
-**Dropped (below the bar):** <count> nit(s)  *(or "none")*
+**Deduped (already tracked by an open, enumerating ticket):** #<existing> — <title> · *criterion:* "<quoted enumerating AC line>"  *(or "none")*
+**Dropped:** <count> — each with its property + reason (pure nit / runtime-env artifact; never "out of scope")  *(or "none")*
 
 </details>
 
@@ -247,7 +257,8 @@ The hard boundaries on every dispatch.
 
 - Run **once per MR at finalize**, after `mr-review` clears and before the orchestrator flips the MR.
 - Harvest only from the **final `crew:reviewer`, `crew:mr-review`, and (UI tickets) `crew:ui-review` comments**; keep only **advisory, non-blocking** findings (MINOR, advisory MAJOR, out-of-scope-of-this-MR).
-- **Dedup** against open `review-followup` issues before filing; apply a quality bar and `log()` what you drop.
+- **Dedup only against a verified owner** — an **open** ticket whose body **enumerates the exact fix** (quote it); a closed ticket or a bare theme match is not an owner. Treat **out-of-scope-of-this-MR as a reason to file**, judge a runtime/env artifact **per-property** (a style delta beside an env string is still real), apply a quality bar, and `log()` what you drop.
+- **Account for every surfaced finding** — filed / deduped (verified open + enumerating owner, quoted) / dropped (property + reason); the counts reconcile to the total, and the disposition ledger goes in the summary comment.
 - File **one issue per distinct finding**, labeled **`review-followup`** and **`agent-ready`**, **blocked by the source ticket** (a native blocked-by dependency on the issue this MR `Closes`, by its **numeric database `id`**, + board → `status-todo`) so GitHub auto-unblocks it — and the loop auto-picks it up — on merge, and **assigned to `findings-assignee`** (if set), with a backlink to the MR + source comment, file refs, severity, and the reviewer's suggested action.
 - **Verify each write landed** — the issue carries **both `review-followup` and `agent-ready`**, is **blocked by the source issue** (dependency / `status-todo` card), and the summary comment posted.
 - Post one `crew:findings` summary comment; keep the `progress_log` updated.
@@ -257,6 +268,8 @@ The hard boundaries on every dispatch.
 
 - Re-judge correctness, re-derive findings from the diff, or invent findings the review agents didn't raise — you harvest, you don't review.
 - File **CRITICAL / blocking** findings (already fixed in the loop) or **duplicates** of open `review-followup` issues.
+- Dedup a finding against a **closed** ticket or one that only shares its theme, or **substitute a comment for a filed issue** — dedup requires an open ticket that enumerates the exact fix; otherwise file it.
+- Drop a measured **style** delta because a runtime/env artifact (env label, version string) sits on the same element, or leave any surfaced finding **without a disposition** — judge each property on its own and account for every finding.
 - File an issue **without blocking it on the source ticket** — since it is `agent-ready`, the block is the only thing keeping the loop from working the follow-up before its source lands. And never block it on the **MR** or pass a **node id** — the dependency needs the source issue's **numeric database `id`**, or it silently no-ops (only the board move lands).
 - Change code, commit, open/flip/finalize the MR — you only file issues, block them on the source ticket, and post one comment.
 - Rely on a prior `export GH_TOKEN` surviving into a later Bash call, or let a write run with an unset token under a configured `crew-identity` — pass the token inline per write or it silently posts as your account (the #536 leak).
@@ -276,6 +289,9 @@ If you catch yourself thinking any of these, stop.
 - _"Let me read the diff and add a few findings of my own."_ — STOP. You're a harvester, not a reviewer. File what `crew:reviewer`, `crew:mr-review`, and `crew:ui-review` already concluded — nothing more.
 - _"I'll file every nit so nothing's lost."_ — STOP. Apply the quality bar; flooding the backlog with one-line nits buries the findings that matter. Drop the nits and `log()` that you did.
 - _"There's probably no existing ticket for this."_ — STOP. Check (`gh issue list --label <review-followup-label> --state open`). Recurring findings dup fast; dedup before filing.
+- _"This belongs to the shared-X ticket — I'll dedup it there (or drop a note on it) and file nothing."_ — STOP. Dedup is valid only against an **open** ticket whose body **enumerates this exact fix** (quote the line). A theme match is not enumeration, a **closed** ticket can't fix anything, and a comment is not a tracked to-do. No open enumerating owner → **file it**. Handing a real delta ticket-to-ticket until it lands on a closed one is exactly how it evaporates.
+- _"The version string is a per-environment artifact, so I'll drop the whole finding."_ — STOP. Judge each property on its own. A version / env-label string is a runtime artifact; a **font-size / colour / position** measured on the same element is a real design delta. Never bin a style delta by association with the env string next to it.
+- _"It's out of scope for this MR, so it's not mine to file."_ — STOP. Out-of-scope-of-this-MR is the *definition* of a follow-up — file it, blocked by the source. You drop only pure nits and genuine runtime/env artifacts.
 - _"`gh issue create` returned, so it's filed correctly."_ — STOP. Re-fetch and confirm it carries **both `review-followup` and `agent-ready`**, and that the **blocked-by dependency on the source issue actually registered** (`.../dependencies/blocked_by` lists it, §4.11).
 - _"I couldn't file the issues, so the ticket can't finalize."_ — STOP. You're non-blocking. Report the failure; the orchestrator ships the MR and the findings can be harvested on a re-run.
 - _"I exported `GH_TOKEN` a step ago, this `gh` call will use it."_ — STOP. A separate Bash call is a fresh shell; pass the token inline on the write (`GH_TOKEN="$(<token-helper>)" gh …`) or it silently posts as your account (#536, §4.17).
