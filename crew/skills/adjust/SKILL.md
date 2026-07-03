@@ -137,7 +137,7 @@ The loop picks up open issues carrying an agent-ready label; the default is `age
 
 #### The review-followup label
 
-`crew:findings` files small advisory follow-ups under this label for a human to plan post-merge; the default is `review-followup`, and each is blocked by its source MR until it merges.
+`crew:findings` files small advisory follow-ups under this label; the default is `review-followup`, and each is also labeled `agent-ready` and blocked by its source MR, so it auto-enters the loop once that MR merges and unblocks it.
 
 - Check whether it exists: `gh label list --search review-followup`; substitute if the project uses another name.
 - Record the chosen name as `review-followup-label` (offer to create it in **Step 13**).
@@ -196,7 +196,7 @@ Map each of the four named states the loop needs to a real column on the chosen 
 
 You will not:
 
-- Reuse `agent-ready` as the review-followup label — the loop would auto-pick the follow-ups it files.
+- Reuse `agent-ready` as the review-followup label — the two must stay distinct so `crew:findings` can identify and dedup its own follow-ups by the review-followup label (it applies `agent-ready` on top so they auto-enter the loop once unblocked).
 - Reuse `agent-ready` or `agent-planned` as the `instructions` label — `/crew:pro` would pick up its own planned output as new instructions; keep the three planning labels distinct from each other and from `agent-ready`.
 - Assume the board's column names — they vary per board, so read them with `gh project field-list` and map to the real strings.
 - Treat "no board" as a blocker — label-only selection is a supported mode (`board: none`).
