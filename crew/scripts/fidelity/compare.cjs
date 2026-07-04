@@ -12,12 +12,13 @@
 // gate misses.
 //
 //   node compare.cjs --build build.json [--design-extract design.json]
-//                    [--design-css tokens.css] [--mode shadow|enforce]
+//                    [--design-css tokens.css]
 //   node compare.cjs --selftest
 //
-// Exit code: 0 on PASS (or shadow), 1 on FAIL, 2 on a usage/IO error. The JSON
-// `status` is the source of truth; the agent maps it to the MR-comment verdict
-// and owns the separate BLOCKED case (design source unreachable).
+// A measured MAJOR always gates: `status` is FAIL. There is no advisory mode.
+// Exit code: 0 on PASS, 1 on FAIL, 2 on a usage/IO error. The JSON `status` is
+// the source of truth; the agent maps it to the MR-comment verdict and owns the
+// separate BLOCKED case (design source unreachable).
 
 'use strict';
 const fs = require('fs');
@@ -185,7 +186,7 @@ function alignAndDiff(build, design) {
 }
 
 // ---------- run ----------
-function evaluate({ build, design, designExtract, mode }) {
+function evaluate({ build, design, designExtract }) {
   const designUsed = new Set();
   if (designExtract) {
     (designExtract.usedFamilies || []).forEach(f => designUsed.add(ci(f)));
@@ -197,23 +198,20 @@ function evaluate({ build, design, designExtract, mode }) {
 
   const major = deltas.filter(d => d.severity === 'MAJOR');
   const minor = deltas.filter(d => d.severity === 'MINOR');
-  const wouldFail = major.length > 0;
-  const status = (mode === 'enforce' && wouldFail) ? 'FAIL' : 'PASS';
+  // A measured MAJOR always gates — there is no advisory mode.
+  const status = major.length > 0 ? 'FAIL' : 'PASS';
   return {
-    status, mode,
+    status,
     checks: {
       fontLoad: !!design,
       perElement: !!designExtract,
       perElementNote: designExtract ? null : 'No design render provided — per-element type comparison skipped (font-load assertion + token check only). Token→element ownership not closed in this mode.'
     },
     counts: { major: major.length, minor: minor.length },
-    wouldFailUnderEnforce: wouldFail,
     deltas: major.concat(minor),
     summary: status === 'FAIL'
       ? `${major.length} MAJOR fidelity delta(s) — gate FAIL.`
-      : (wouldFail
-        ? `${major.length} MAJOR delta(s) found but mode=shadow (advisory, non-gating).`
-        : `No MAJOR fidelity delta. ${minor.length} MINOR note(s).`)
+      : `No MAJOR fidelity delta. ${minor.length} MINOR note(s).`
   };
 }
 
@@ -225,29 +223,21 @@ function loadArgs(argv) {
     else if (k === '--build') a.build = argv[++i];
     else if (k === '--design-extract') a.designExtract = argv[++i];
     else if (k === '--design-css') a.designCss = argv[++i];
-    else if (k === '--mode') a.mode = argv[++i];
   }
   return a;
-}
-
-function resolveMode(raw) {
-  const m = ci(raw);
-  if (m === 'enforce') return 'enforce';
-  if (raw && m !== 'shadow') process.stderr.write(`warning: unrecognized --mode "${raw}", defaulting to shadow (non-gating)\n`);
-  return 'shadow';
 }
 
 function main() {
   const a = loadArgs(process.argv);
   if (a.selftest) return selftest();
-  if (!a.build) { process.stderr.write('usage: compare.cjs --build build.json [--design-extract d.json] [--design-css t.css] [--mode shadow|enforce]\n'); process.exit(2); }
+  if (!a.build) { process.stderr.write('usage: compare.cjs --build build.json [--design-extract d.json] [--design-css t.css]\n'); process.exit(2); }
   let build, design = null, designExtract = null;
   try {
     build = readJSON(a.build);
     if (a.designCss) design = parseDesignCss(fs.readFileSync(a.designCss, 'utf8'));
     if (a.designExtract) designExtract = readJSON(a.designExtract);
   } catch (e) { process.stderr.write('IO error: ' + e.message + '\n'); process.exit(2); }
-  const out = evaluate({ build, design, designExtract, mode: resolveMode(a.mode) });
+  const out = evaluate({ build, design, designExtract });
   process.stdout.write(JSON.stringify(out, null, 2) + '\n');
   process.exit(out.status === 'FAIL' ? 1 : 0);
 }
@@ -277,38 +267,34 @@ function selftest() {
   check('parses --font-display -> Schibsted Grotesk', design.display === 'Schibsted Grotesk');
   check('derives declared family from token', !!design.families['schibsted grotesk']);
 
-  // 2. enforce on the real login build -> FAIL, with the font-load MAJOR
-  const v1 = evaluate({ build: buildLogin, design, designExtract, mode: 'enforce' });
-  check('login build FAILs under enforce', v1.status === 'FAIL');
+  // 2. the real login build -> FAIL, with the font-load MAJOR
+  const v1 = evaluate({ build: buildLogin, design, designExtract });
+  check('login build FAILs', v1.status === 'FAIL');
   check('flags Schibsted bundled-but-never-loaded', v1.deltas.some(d => d.dimension === 'font-load' && /never loads/i.test(d.title)));
   check('flags display face unused', v1.deltas.some(d => /unused/i.test(d.title)));
   check('flags wrong font on heading (per-element)', v1.deltas.some(d => d.dimension === 'typography' && /Wrong font on/i.test(d.title)));
 
-  // 3. same build under shadow -> PASS but wouldFailUnderEnforce
-  const v2 = evaluate({ build: buildLogin, design, designExtract, mode: 'shadow' });
-  check('shadow does not gate', v2.status === 'PASS' && v2.wouldFailUnderEnforce === true);
-
-  // 4. a correct build (Schibsted loaded + used, heading matches) -> PASS under enforce
+  // 3. a correct build (Schibsted loaded + used, heading matches) -> PASS
   const buildGood = {
     fonts: [{ family: 'Schibsted Grotesk', weight: '400 900', status: 'loaded' }, { family: 'Inter', weight: '100 900', status: 'loaded' }],
     usedFamilies: ['Schibsted Grotesk', 'Inter'],
     elements: [{ text: 'Sign in', key: 'sign in', role: 'heading', tag: 'h1', rect: { x: 604, y: 300, w: 118, h: 26 },
       font: { family: '"Schibsted Grotesk"', primary: 'Schibsted Grotesk', size: 22, weight: 600, lineHeight: 26, letterSpacing: 0 } }]
   };
-  const v3 = evaluate({ build: buildGood, design, designExtract, mode: 'enforce' });
-  check('correct build PASSes under enforce', v3.status === 'PASS' && v3.counts.major === 0);
+  const v3 = evaluate({ build: buildGood, design, designExtract });
+  check('correct build PASSes', v3.status === 'PASS' && v3.counts.major === 0);
 
-  // 5. tokens-only mode still catches the never-loaded face (no design render)
-  const v4 = evaluate({ build: buildLogin, design, designExtract: null, mode: 'enforce' });
+  // 4. tokens-only mode still catches the never-loaded face (no design render)
+  const v4 = evaluate({ build: buildLogin, design, designExtract: null });
   check('tokens-only still FAILs on never-loaded face', v4.status === 'FAIL' && v4.checks.perElement === false);
 
-  // 6. token CSS with NO trailing ';' on the last declaration still parses (the CRITICAL regression)
+  // 5. token CSS with NO trailing ';' on the last declaration still parses (the CRITICAL regression)
   const designNoSemi = parseDesignCss(`:root { --font-sans: 'Inter'; --font-display: 'Schibsted Grotesk', 'Inter' }`);
   check('parses display token without trailing semicolon', designNoSemi.display === 'Schibsted Grotesk');
-  const v5 = evaluate({ build: buildLogin, design: designNoSemi, designExtract: null, mode: 'enforce' });
+  const v5 = evaluate({ build: buildLogin, design: designNoSemi, designExtract: null });
   check('no-trailing-semicolon tokens still FAIL the login build', v5.status === 'FAIL' && v5.deltas.some(d => /never loads/i.test(d.title)));
 
-  // 7. a bundled-but-unused secondary face (mono on a login route) does NOT false-fire (tokens-only)
+  // 6. a bundled-but-unused secondary face (mono on a login route) does NOT false-fire (tokens-only)
   const designMulti = parseDesignCss(`:root { --font-display: 'Schibsted Grotesk'; --font-sans: 'Inter'; --font-mono: 'JetBrains Mono'; --font-size-h1: 22px; }`);
   check('does not register --font-size-* as a family', !designMulti.families['22px']);
   const buildMono = {
@@ -316,10 +302,10 @@ function selftest() {
     usedFamilies: ['Schibsted Grotesk', 'Inter'],
     elements: [{ text: 'Sign in', key: 'sign in', role: 'heading', tag: 'h1', rect: { x: 0, y: 0, w: 10, h: 10 }, font: { primary: 'Schibsted Grotesk', size: 22, weight: 600 } }]
   };
-  const v6 = evaluate({ build: buildMono, design: designMulti, designExtract: null, mode: 'enforce' });
+  const v6 = evaluate({ build: buildMono, design: designMulti, designExtract: null });
   check('bundled-but-unused mono does not false-fire', v6.status === 'PASS' && !v6.deltas.some(d => /JetBrains/i.test(d.title)));
 
-  // 8. role dominates the IoU tie-break: a high-IoU wrong-role element does not steal the match
+  // 7. role dominates the IoU tie-break: a high-IoU wrong-role element does not steal the match
   const dBtn = { elements: [{ text: 'Save', key: 'save', role: 'button', rect: { x: 0, y: 0, w: 60, h: 20 }, font: { primary: 'Inter', size: 14, weight: 600 } }] };
   const buildTwoSave = {
     fonts: [{ family: 'Inter', status: 'loaded' }], usedFamilies: ['Inter'],
@@ -328,43 +314,40 @@ function selftest() {
       { text: 'Save', key: 'save', role: 'button', tag: 'button', rect: { x: 300, y: 300, w: 60, h: 20 }, font: { primary: 'Inter', size: 14, weight: 600 } }
     ]
   };
-  const v7 = evaluate({ build: buildTwoSave, design: parseDesignCss(":root{--font-display:'Inter'}"), designExtract: dBtn, mode: 'enforce' });
+  const v7 = evaluate({ build: buildTwoSave, design: parseDesignCss(":root{--font-display:'Inter'}"), designExtract: dBtn });
   check('role match beats high-IoU wrong-role element', !v7.deltas.some(d => /Wrong font-size/i.test(d.title)));
 
-  // 9. a matched element missing its font object is skipped, not a crash
+  // 8. a matched element missing its font object is skipped, not a crash
   let crashed = false, v8;
   try {
     v8 = evaluate({
       build: { fonts: [], usedFamilies: [], elements: [{ text: 'x', key: 'x', role: 'text', rect: { x: 0, y: 0, w: 1, h: 1 } }] },
       design: parseDesignCss(":root{--font-display:'Inter'}"),
-      designExtract: { elements: [{ text: 'x', key: 'x', role: 'text', rect: { x: 0, y: 0, w: 1, h: 1 } }] }, mode: 'enforce'
+      designExtract: { elements: [{ text: 'x', key: 'x', role: 'text', rect: { x: 0, y: 0, w: 1, h: 1 } }] }
     });
   } catch (e) { crashed = true; }
   check('missing font object does not crash the gate', !crashed && v8 && (v8.status === 'PASS' || v8.status === 'FAIL'));
 
-  // 10. extra-element completeness is reported (MINOR) when the build has an element the design lacks
+  // 9. extra-element completeness is reported (MINOR) when the build has an element the design lacks
   const v9 = evaluate({
     build: { fonts: [{ family: 'Inter', status: 'loaded' }], usedFamilies: ['Inter'],
       elements: [{ text: 'Surprise', key: 'surprise', role: 'text', rect: { x: 0, y: 0, w: 1, h: 1 }, font: { primary: 'Inter', size: 14, weight: 400 } }] },
     design: parseDesignCss(":root{--font-display:'Inter'}"),
-    designExtract: { elements: [] }, mode: 'enforce'
+    designExtract: { elements: [] }
   });
   check('reports an extra element as MINOR', v9.deltas.some(d => d.dimension === 'completeness' && /Extra element/i.test(d.title)) && v9.status === 'PASS');
 
-  // 11. an unrecognized --mode degrades to shadow (resolveMode)
-  check('unrecognized mode resolves to shadow', resolveMode('Enforce!') === 'shadow' && resolveMode('ENFORCE') === 'enforce');
-
-  // 12. extra-element output is capped (a content-rich build can't flood the deltas)
+  // 10. extra-element output is capped (a content-rich build can't flood the deltas)
   const manyExtras = { fonts: [{ family: 'Inter', status: 'loaded' }], usedFamilies: ['Inter'],
     elements: Array.from({ length: 9 }, (_, i) => ({ text: 'row' + i, key: 'row' + i, role: 'text', rect: { x: 0, y: i, w: 1, h: 1 }, font: { primary: 'Inter', size: 14, weight: 400 } })) };
-  const v10 = evaluate({ build: manyExtras, design: parseDesignCss(":root{--font-display:'Inter'}"), designExtract: { elements: [] }, mode: 'enforce' });
+  const v10 = evaluate({ build: manyExtras, design: parseDesignCss(":root{--font-display:'Inter'}"), designExtract: { elements: [] } });
   const extraDeltas = v10.deltas.filter(d => /Extra element|more extra/i.test(d.title));
   check('extra-element output is capped', extraDeltas.length <= 6 && v10.deltas.some(d => /more extra/i.test(d.title)));
 
-  // 13. an errored (404) face is reported with accurate wording (requested but failed, not "never requests")
+  // 11. an errored (404) face is reported with accurate wording (requested but failed, not "never requests")
   const buildErr = { fonts: [{ family: 'Schibsted Grotesk', status: 'error' }, { family: 'Inter', status: 'loaded' }], usedFamilies: ['Inter'],
     elements: [{ text: 'Sign in', key: 'sign in', role: 'heading', rect: { x: 0, y: 0, w: 1, h: 1 }, font: { primary: 'Inter', size: 24, weight: 700 } }] };
-  const v11 = evaluate({ build: buildErr, design, designExtract: null, mode: 'enforce' });
+  const v11 = evaluate({ build: buildErr, design, designExtract: null });
   check('errored face wording mentions failed to load', v11.deltas.some(d => /never loads/i.test(d.title) && /failed to load/i.test(d.detail)));
 
   process.stdout.write(log.join('\n') + '\n' + (pass ? 'ALL PASS' : 'SELFTEST FAILED') + '\n');

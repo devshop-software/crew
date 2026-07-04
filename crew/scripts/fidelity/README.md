@@ -26,14 +26,14 @@ MCP browser `adjust` already provisions; the comparison runs with plain `node`.
 # 1. (agent) browser_navigate <build route> ; browser_evaluate <extract-snippet.js> -> build.json
 # 2. (agent, optional) design render_preview -> serve_url ; navigate + evaluate -> design.json
 # 3. (agent) design read_file <tokens.css>
-node compare.cjs --build build.json [--design-extract design.json] [--design-css tokens.css] --mode shadow|enforce
+node compare.cjs --build build.json [--design-extract design.json] [--design-css tokens.css]
 ```
 
 `--design-css` alone (tokens-only) still catches a never-loaded / unused declared
 face. `--design-extract` adds per-element type comparison and closes the
-token→element ownership gap. `--mode enforce` gates (MAJOR → `status:FAIL`);
-`--mode shadow` is advisory (always `status:PASS`, reports `wouldFailUnderEnforce`).
-The design source being unreachable is the agent's separate **BLOCKED** verdict.
+token→element ownership gap. A measured MAJOR always gates (`status:FAIL`); a
+clean route is `status:PASS`. The design source being unreachable is the agent's
+separate **BLOCKED** verdict.
 
 ## Test
 

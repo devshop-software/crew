@@ -150,7 +150,6 @@ A ticket carrying this optional label gets the `crew:ui-review` visual-fidelity 
 
 - Check whether it exists: `gh label list --search ui`; substitute if the project uses another name, or set `ui-label: none` to disable the gate entirely (e.g. a backend/library project with no UI).
 - Record the chosen name as `ui-label` (offer to create it in **Step 13**).
-- Record `ui-fidelity-mode` (default `shadow`) — whether the gate's measured MAJOR deltas are advisory (`shadow`, recommended until it proves out on this project) or gate the MR (`enforce`); flip to `enforce` once the shadow runs look right.
 
 #### The planning labels (`/crew:pro`)
 
@@ -385,7 +384,6 @@ The file is JSONC (JSON with `//` comments) at the repo root, everything nested 
     "e2e-framework": "playwright",
     "agent-ready-label": "agent-ready",
     "ui-label": "ui",                         // UI-gate: tickets with it get the crew:ui-review visual-fidelity gate (or none)
-    "ui-fidelity-mode": "shadow",             // crew:ui-review measured deltas: shadow (advisory) | enforce (gate the MR)
     "instructions-label": "instructions",     // /crew:pro input — the rough ticket it plans
     "planned-label": "agent-planned",         // /crew:pro — planner files here; epic parents stay, work tickets auto-promoted to agent-ready by the orchestrator
     "epic-label": "epic",                     // /crew:pro epic parent grouping each feature's work tickets as native sub-issues
@@ -530,7 +528,7 @@ When invoked with `update`, reconcile the existing `.crew.rc` against a fresh sc
 
 ## Workflow Configuration
 
-`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `ui-label` / `ui-fidelity-mode` / `instructions-label` / `planned-label` / `epic-label` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the required `crew-identity` block — then leaves only a MUST-READ pointer in `CLAUDE.md` (Step 12). It also writes a sibling `.mcp.json` at the same root provisioning the two crew MCP servers (Playwright + design) — an onboarding artifact every agent reads directly, not a `.crew.rc` key (Step 12).
+`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `ui-label` / `instructions-label` / `planned-label` / `epic-label` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the required `crew-identity` block — then leaves only a MUST-READ pointer in `CLAUDE.md` (Step 12). It also writes a sibling `.mcp.json` at the same root provisioning the two crew MCP servers (Playwright + design) — an onboarding artifact every agent reads directly, not a `.crew.rc` key (Step 12). On a re-run it drops any deprecated key no longer in the schema — e.g. the removed `ui-fidelity-mode` (the fidelity gate now always gates on a measured MAJOR; there is no advisory mode).
 
 `.crew.rc` is the single source every component reads instead of guessing — never hardcode an org, repo, board, label, column, or command into any crew file.
 
