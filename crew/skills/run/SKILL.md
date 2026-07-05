@@ -98,30 +98,31 @@ You will not:
 
 ### Step 2 — Triage the candidate
 
-Before committing the worktree, the stack, or any agent to this candidate, triage it from the issue body and its GitHub links/sub-issues. A skip **never stops the loop** — it just records the issue as skipped and moves you to the next candidate at Step 1.
+Before committing the worktree, the stack, or any agent to this candidate, triage it from the **whole issue — body, its comments, and its GitHub links/sub-issues** (`gh issue view <n> --json title,body,labels,comments`). The body is only the ticket as first filed; a human comment added since can resolve a blocker the body still describes — so read the comment thread and triage on the ticket's **current** state, not its opening framing. A skip **never stops the loop** — it just records the issue as skipped and moves you to the next candidate at Step 1.
 
 | Outcome | When | Action |
 |---------|------|--------|
-| **Skip as blocked** | The ticket needs a human (an admin/manual step, or a decision only the user can make), depends on another issue that isn't merged yet, requires access/credentials the agent lacks, or is too underspecified to implement safely. | Post a short *"skipped — blocked: <reason>"* MR/issue comment, move the card to the **needs-human / blocked** column (board only), record the issue as skipped for this run, go back to Step 1. |
+| **Skip as blocked** | The ticket **still** needs a human and no later comment has resolved it: an admin/manual step, or a decision only the user can make **that they haven't since made in the comments**, a dependency that isn't merged yet, access/credentials the agent lacks, or too underspecified to implement safely. A body framed as a question that a human has **since answered in a comment** (a decision + scope, typically alongside a re-applied `agent-ready`) is **no longer blocked** — it is **Actionable**; the implementation agent reads that comment as part of the spec. | Post a short *"skipped — blocked: <reason>"* MR/issue comment, move the card to the **needs-human / blocked** column (board only), record the issue as skipped for this run, go back to Step 1. |
 | **Skip as epic / parent** | The ticket is a container — GitHub sub-issues, or a task-list of linked issues — rather than an atomic unit of work; its `agent-ready` subtasks get picked up on their own. | Comment *"skipped — epic; subtasks are the unit of work"*, leave the card in place, record it as skipped, go back to Step 1. |
 | **Actionable** | None of the above — an atomic, ready unit of work. | Fall through to Step 3. |
 
 You will not:
 
 - Stop the loop on a skip — record the issue as skipped and pick the next candidate at Step 1.
+- Triage from the body alone — read the comments, or you re-skip a ticket a human already unblocked (they made the call in a comment and re-applied `agent-ready`) and the loop parks it forever on a stale opening framing.
 
 ### Step 3 — Claim the ticket
 
-Claim the candidate visibly and by identity, winning the race against any parallel `/crew:run`, before any heavy work. The issue body is the spec the implementation agent reads directly.
+Claim the candidate visibly and by identity, winning the race against any parallel `/crew:run`, before any heavy work. The issue — body and its comments — is the spec the implementation agent reads directly.
 
 1. **Move the card → In progress** (board only) — the human-visible claim signal; do it before any heavy work.
 2. **Stamp an identity-bearing claim and win the race (§4.13).** The card move alone carries no owner identity, so it can't fence off a **parallel** `/crew:run` — both could read the ticket in TODO and both move it; post a structured claim marker on the **issue** — `<!-- crew:claim host=<host> pid=<pid> start=<start-epoch> ts=<now> -->` carrying your `RUN_ID` (a short human-readable line alongside it is fine) — then **re-fetch the issue's comments and confirm yours is the *earliest* `crew:claim`** (verify-landed per §4.11). GitHub's monotonic comment IDs are the tiebreak: if an **earlier claim from a different, live** run exists, you **lost the race** — record the issue as skipped-this-run and go back to Step 1 for the next candidate.
-3. Capture the issue body — it is the spec the implementation agent will read directly; hold only the issue number and title for branch naming and reporting.
+3. Capture the issue — body and comments — as the spec the implementation agent will read directly; hold only the issue number and title for branch naming and reporting.
 
 You will not:
 
 - Touch the worktree or MR of a ticket whose race you lost — record it skipped-this-run and return to Step 1 (§4.13).
-- Parse or restate the issue body yourself — the agent reads it directly.
+- Parse or restate the issue yourself — the agent reads the body and its comments directly.
 
 ### Step 4 — Create the per-ticket worktree
 
@@ -456,7 +457,7 @@ The hard boundaries on every run.
 - Dispatch every phase to a subagent — never write code, tests, or reviews in the orchestrator. You only move cards, read MR comments, and decide the next phase.
 - Read `.crew.rc` fresh each run — never hardcode an org, repo, board, label, or column name.
 - Treat the **GitHub issue as the spec** — there is no spec phase and no `01-spec.md`.
-- **Triage every candidate before any work** — skip blockers (needs-human / unmerged dependency / missing access / underspecified) and epics/parents with a short comment + card move, record them as skipped, and pick the next candidate. The loop stops only when no **actionable** ticket remains.
+- **Triage every candidate before any work** — from the whole issue, **comments included**, not the body alone: skip blockers (needs-human / unmerged dependency / missing access / underspecified) and epics/parents with a short comment + card move, record them as skipped, and pick the next candidate. A body framed as a question that a human has **since answered in a comment** is Actionable, not blocked — triage the current state, never the opening framing. The loop stops only when no **actionable** ticket remains.
 - Keep **one MR per ticket**; the implementation agent opens it as a draft with `Closes #<issue>`; every agent thereafter commits to that branch and comments on that MR.
 - Own **one worktree per ticket** off the **bare clone** (set up by `adjust`; fall back to the existing checkout if there's no bare clone), and dispatch all phases into it; remove it at finalize (an escalated ticket's tree may be left in place).
 - **Fork each worktree from a freshly-fetched base (§4.15)** — `git fetch origin <base>` then branch off `origin/<base>`, never the (possibly stale) local base ref; a stale fork silently rots the MR into conflicts as the base advances.
@@ -506,6 +507,7 @@ If you catch yourself thinking any of these, stop.
 - _"The reviewer passed, I'll run mr-review right away even though CI is still going"_ — STOP. Wait for the CI gate (Step 9). mr-review reviews a green, stable diff; a red check is a fix trigger, not something to skip past.
 - _"CI is red but the reviewer passed, I'll flip to ready-for-review anyway"_ — STOP. Never finalize over a red required check. Red CI is a fix round (Step 9), inside the same 3-round cap.
 - _"This ticket needs a human / is an epic, but I'll try implementing it anyway"_ — STOP. Triage first: skip it with a comment + card move, record it as skipped, and pick the next candidate. The loop only stops when nothing actionable is left.
+- _"The body says this needs a human decision, so I'll skip it as blocked"_ — STOP. Read the **comments** first (Step 2). A human may have already made the call and re-applied `agent-ready` — the block is resolved, the ticket is **Actionable**, and re-posting the same skip parks it forever on a stale opening framing. Triage the current state, not how the ticket was first filed.
 - _"qa can just spin the app up itself"_ — STOP. You own the stack. Bring it up in Step 5 with issue-derived isolation, export the URL, and tear it down at finalize.
 - _"`kill $(lsof -ti :PORT)` returned, so the stack's down"_ — STOP. That often kills only one PID of the dev-server tree (`pnpm → sh → node → next-server`) and **leaks the server**. Tear down with `fuser -k <port>/tcp` (or `docker compose -p <project> down`) and confirm the port is free; sweep finalized-ticket ports before each bring-up (§4.8).
 - _"I exported `GH_TOKEN` a step ago, this `gh` call will use it"_ — STOP. A separate Bash call is a fresh shell; pass the token inline on the write (`GH_TOKEN="$(<token-helper>)" gh …`) or it silently posts as your account (#536, §4.17).
