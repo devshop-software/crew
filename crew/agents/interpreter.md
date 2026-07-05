@@ -109,7 +109,7 @@ The intent contract has seven dimensions, each grounded as noted:
 | What's needed | The outcome the work must achieve, at the journey level. | The brief + the map's existing-vs-missing. |
 | Why now | The reason this matters — context the planner can't infer. | The brief. |
 | Decisions already made | Approaches the human has already settled (so the planner doesn't re-open them). | The brief + the map. |
-| Boundary (in / out) | What is in scope and — by positive enumeration — what is explicitly out. | The map's surfaces (what exists to touch vs leave). |
+| Boundary (in / out) | What is in scope and — by positive enumeration — what is explicitly out. | The map's surfaces (what exists to touch vs leave); recommend the **full instruction in scope**, marking functionality out only where the brief or the user genuinely excludes it. |
 | Milestone placement | Which milestone the work belongs under — an existing one, **none**, or a **new one the user names**. | The existing milestone list; recommend the best-fitting existing one, but offer *none* and *new: `<name>`* when none genuinely fits. |
 | Acceptance shape | What "done" looks like at the outcome level — the shape of the acceptance criteria. | The brief + the map. |
 | Verification | How done is proven (the venues — e2e / unit / manual check). | `CLAUDE.md` + the project's check commands. |
