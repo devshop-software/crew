@@ -137,7 +137,7 @@ The loop picks up open issues carrying an agent-ready label; the default is `age
 
 #### The review-followup label
 
-`crew:findings` files small advisory follow-ups under this label; the default is `review-followup`, and each is also labeled `agent-ready` and blocked by its source MR, so it auto-enters the loop once that MR merges and unblocks it.
+`crew:findings` consolidates small advisory follow-ups into cohesive sweep tickets under this label; the default is `review-followup`, and each sweep is also labeled `agent-ready` and blocked by every contributing source MR (UI-fidelity sweeps additionally carry the `ui-label` so `crew:ui-review` verifies them), so it auto-enters the loop once all its sources merge and unblock it.
 
 - Check whether it exists: `gh label list --search review-followup`; substitute if the project uses another name.
 - Record the chosen name as `review-followup-label` (offer to create it in **Step 13**).
@@ -480,7 +480,7 @@ After writing, surface the gaps that will bite the loop so the user can decide, 
 | No `agent-ready` label yet | Offer to create it: `gh label create <label> --color 0E8A16 --description "Ready for the crew loop"` — the loop needs at least one labeled issue to do anything. |
 | No `instructions` label yet | Offer to create it: `gh label create <instructions-label> --color FBCA04 --description "Rough ticket for /crew:pro to plan into a board"` — `/crew:pro` plans tickets carrying it (and without it you can't mark one). |
 | No `agent-planned` / `epic` label yet | `/crew:pro`'s planner self-creates `agent-planned` (and `epic` for each feature group) at runtime, but offer to pre-create them: `gh label create <planned-label> --color C5DEF5 --description "Planned by /crew:pro"`. |
-| No `review-followup` label yet | Offer to create it: `gh label create <review-followup-label> --color 5319E7 --description "Review follow-up from crew — small, MR-blocked backlog"` — without it `crew:findings` can't tag its follow-ups. |
+| No `review-followup` label yet | Offer to create it: `gh label create <review-followup-label> --color 5319E7 --description "Review follow-up from crew — cohesive, MR-blocked backlog sweeps"` — without it `crew:findings` can't tag its follow-ups. |
 | No `ui` label yet | Offer to create it: `gh label create <ui-label> --color 1D76DB --description "UI ticket — gets the crew:ui-review visual-fidelity gate"` — tickets carrying it are verified against the design MCP before findings (skip if `ui-label: none`). |
 | No board | Fine — the loop runs label-only (oldest agent-ready issue first) and won't move cards; mention a board adds visible TODO → In review tracking and an escalation column. |
 | No e2e framework | Warn that `crew:qa` extends a whole-app e2e suite and has nothing to extend; suggest Playwright or Cypress without installing it. |
