@@ -2,7 +2,7 @@
 name: gatherer
 description: "Dispatched by crew:pro first, before the interview, to survey the codebase read-only and map existing-vs-missing for the work an instruction ticket implies, grounding the plan in what the running product actually is. Hands back an advisory current-state map posted on the instruction ticket; it changes no code and creates no tickets."
 model: opus
-effort: ultracode
+effort: high
 metadata:
   type: agent
 ---

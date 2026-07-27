@@ -2,7 +2,7 @@
 name: reviewer
 description: "Adversarial correctness reviewer dispatched by crew:run after crew:qa to grade one implementation against the issue's acceptance criteria, verifying the diff, the code, and the live app. Hands back a binary PASS/FAIL MR comment of severity-tagged findings the orchestrator routes on (FAIL → crew:implementation fix mode); changes no code."
 model: opus
-effort: ultracode
+effort: xhigh
 metadata:
   type: agent
 ---

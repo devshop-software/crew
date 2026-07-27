@@ -1,6 +1,7 @@
 ---
 name: pro
 description: "Attended planning orchestrator that turns one big instruction ticket into a granular board by dispatching gatherer → interpreter → planner — surveying the code, interviewing you with recommended options, then filing high-level tickets grouped under epics as native sub-issues, auto-promoting them to agent-ready in TODO, and closing the instruction ticket. Use when the user invokes /crew:pro."
+effort: xhigh
 metadata:
   type: orchestrator
   mode: loop
@@ -160,7 +161,7 @@ You will not:
 Every phase is dispatched via the Agent tool; this contract is the point of the orchestrator — it owns dispatch and bookkeeping, not the planning work.
 
 - **Agent type:** `agent_type: crew:<phase>` (`crew:gatherer`, `crew:interpreter`, `crew:planner`).
-- **Model / effort:** `model: opus`, `effort: ultracode`. The heavy reasoning lives in the agents; you stay thin.
+- **Model / effort:** each agent declares its own `model` and `effort` in its frontmatter — pass neither at dispatch (the Agent tool has no `effort` parameter, and a `model` override would only shadow what the agent already declares). The heavy reasoning lives in the agents; you stay thin.
 - **Working directory:** the repo root — there is no per-ticket worktree (the gatherer reads code read-only; the planner only writes to GitHub). Do **not** set `isolation: worktree`.
 - **The interview is yours, not a dispatch:** you run `AskUserQuestion` in your own main loop (Step 4) between the interpreter's two dispatches; the interpreter's **prepare** and **write** dispatches are non-interactive (a subagent has no live user), so dispatch them like any other phase and reconcile from their return / artifact, not the notification. `crew:gatherer` and `crew:planner` likewise reconcile from their durable artifacts.
 

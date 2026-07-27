@@ -1,6 +1,7 @@
 ---
 name: adjust
 description: "Onboards a project for the crew loop: detects and validates the toolchain and GitHub wiring, sets up the required crew bot identity, and writes the single `.crew.rc` config (plus a `.mcp.json`) every other crew component reads. Use when the user invokes /crew:adjust."
+effort: xhigh
 metadata:
   type: regular
   mode: single-execution

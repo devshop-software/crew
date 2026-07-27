@@ -2,7 +2,7 @@
 name: pull-triage
 description: "Dispatched by crew:pulls once at run start to survey the whole open ready-for-review MR set as a SET and classify it (quick-win / dependency-driven / giant / blocker / has-human-block / duplicate), grounding in the codebase enough to see the relationships. Hands back a per-run tracking issue holding the advisory plan the orchestrator reads as ordering hints; changes no code and merges nothing."
 model: opus
-effort: ultracode
+effort: xhigh
 metadata:
   type: agent
 ---

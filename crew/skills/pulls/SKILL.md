@@ -1,6 +1,7 @@
 ---
 name: pulls
 description: "Autonomous merge orchestrator that runs alongside /crew:run and drains the ready-for-review MR queue by merging the MRs itself — merge is the default, the only human brake is an unresolved comment on the MR, and all code work (conflict and CI fixes) is dispatched to subagents. Use when the user invokes /crew:pulls."
+effort: high
 metadata:
   type: orchestrator
   mode: loop
@@ -262,13 +263,13 @@ You will not:
 
 ## Subagent Dispatch
 
-Dispatch via the Agent tool, same shape as `/crew:run` — you own dispatch and bookkeeping, never the work.
+Dispatch via the Agent tool, same shape as `/crew:run` — you own dispatch and bookkeeping, never the work. Each agent declares its own `model` and `effort` in its frontmatter, so pass neither at dispatch (the Agent tool has no `effort` parameter, and a `model` override would only shadow what the agent already declares).
 
-- **`pull-triage`** — `model: opus`, `effort: ultracode`. The cross-MR brain; dispatched **once** at Phase 1 run start to open the per-run triage issue. cwd at the repo root (it surveys the whole set, not one worktree).
-- **`merge-judge`** — `model: opus`, `effort: ultracode`. The per-MR decision + question responder; dispatched **once per candidate** in Step 5 (and Step 4 for a question reply). cwd = the MR's context (a worktree if one is up, else the repo root for a diff read).
-- **`crew:implementation`** — `model: opus`, `effort: ultracode`, **fix mode** — for **conflict resolution** (Step 6, brief: "resolve these merge conflicts against `<base>`, preserving both intents") and **CI fixes** (Step 7). cwd = the **MR worktree**. Pass the **orchestrator-owned round counters** (`fix round F`).
-- **`crew:qa`** — `model: opus`, `effort: ultracode` — for a **test-related CI** failure, against the running stack you brought up. cwd = the MR worktree.
-- **`crew:findings`** — `model: opus`, `effort: ultracode` — **optional tail** in Step 9, only when the MR has a `Closes #N` source issue.
+- **`pull-triage`** — the cross-MR brain; dispatched **once** at Phase 1 run start to open the per-run triage issue. cwd at the repo root (it surveys the whole set, not one worktree).
+- **`merge-judge`** — the per-MR decision + question responder; dispatched **once per candidate** in Step 5 (and Step 4 for a question reply). cwd = the MR's context (a worktree if one is up, else the repo root for a diff read).
+- **`crew:implementation`** — **fix mode** — for **conflict resolution** (Step 6, brief: "resolve these merge conflicts against `<base>`, preserving both intents") and **CI fixes** (Step 7). cwd = the **MR worktree**. Pass the **orchestrator-owned round counters** (`fix round F`).
+- **`crew:qa`** — for a **test-related CI** failure, against the running stack you brought up. cwd = the MR worktree.
+- **`crew:findings`** — **optional tail** in Step 9, only when the MR has a `Closes #N` source issue.
 
 Each prompt carries:
 

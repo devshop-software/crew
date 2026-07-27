@@ -2,7 +2,7 @@
 name: findings
 description: "Dispatched by crew:run at ticket finalize, after crew:mr-review clears, to harvest the advisory findings the review agents left on the MR and consolidate them into a small set of cohesive, deduped review-followup sweep tickets — each blocked by every contributing source ticket, UI-fidelity sweeps carrying the ui-label so crew:ui-review verifies them — that the loop auto-picks up once their sources merge. Hands back a count of findings filed / deduped / dropped plus a summary MR comment; changes no code."
 model: opus
-effort: ultracode
+effort: high
 metadata:
   type: agent
 ---

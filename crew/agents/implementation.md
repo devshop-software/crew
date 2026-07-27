@@ -2,7 +2,7 @@
 name: implementation
 description: "Dispatched by crew:run to build one GitHub issue end-to-end inside the per-ticket worktree — implementing it, writing unit/integration tests, running the project checks, and on first dispatch opening the draft MR — or, in fix mode, fixing only what a reviewer FAIL or red CI flagged. Hands back an MR comment plus a DONE/BLOCKED status the loop routes on."
 model: opus
-effort: ultracode
+effort: xhigh
 metadata:
   type: agent
 ---

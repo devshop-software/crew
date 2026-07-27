@@ -2,7 +2,7 @@
 name: qa
 description: "Dispatched by crew:run after crew:implementation opens the draft MR to verify the implementation against the issue's acceptance criteria — routing each criterion to its venue and weaving the ticket's behavior into the one whole-app e2e/gherkin suite, then committing the test code. Hands back an MR comment with a coverage map and a PASS/FAIL/PARTIAL verdict the orchestrator routes on; owns the e2e tree and fixes no implementation code."
 model: opus
-effort: ultracode
+effort: xhigh
 metadata:
   type: agent
 ---

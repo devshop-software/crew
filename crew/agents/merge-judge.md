@@ -2,7 +2,7 @@
 name: merge-judge
 description: "Dispatched by crew:pulls once per candidate MR to make the independent merge decision and handle the human control surface, reading the diff cold and then cross-checking the crew:reviewer and crew:mr-review verdicts as evidence. Hands back a structured MERGE / FIX / PARK verdict the orchestrator routes on; changes no code and merges nothing."
 model: opus
-effort: ultracode
+effort: xhigh
 metadata:
   type: agent
 ---

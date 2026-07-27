@@ -2,7 +2,7 @@
 name: mr-review
 description: "Dispatched by crew:run as the last gate after crew:reviewer passes, to review the MR diff blind for maintainability and craft — duplication, dead code, leaky abstractions, naming, complexity, weak tests. Hands back a PROCEED/BOUNCE gate outcome plus a findings MR comment, where a CRITICAL smell can bounce the MR to implementation once; changes no code."
 model: opus
-effort: ultracode
+effort: high
 metadata:
   type: agent
 ---

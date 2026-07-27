@@ -2,7 +2,7 @@
 name: ui-review
 description: "Visual-fidelity reviewer dispatched by crew:run after crew:mr-review clears, on UI-labelled tickets only, to verify the built interface against the source-of-truth design it pulls from the design MCP by measuring the whole rendered route — computed typography and the font-load fact — with a committed fidelity tool rather than eyeballing screenshots. Hands back a PASS / FAIL / BLOCKED MR comment the orchestrator routes on (FAIL → crew:implementation fix mode; BLOCKED → escalate when the design source is absent); changes no code."
 model: opus
-effort: ultracode
+effort: high
 metadata:
   type: agent
 ---

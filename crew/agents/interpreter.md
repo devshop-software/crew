@@ -2,7 +2,7 @@
 name: interpreter
 description: "Dispatched by crew:pro twice around the orchestrator's interview: in prepare mode it grounds on the brief + gatherer map and returns the recommended-option question set the orchestrator asks; in write mode it synthesizes the answers into the resolved-intent record on the instruction ticket. It runs no interview itself (the orchestrator owns the asking) and creates no tickets."
 model: opus
-effort: ultracode
+effort: xhigh
 metadata:
   type: agent
 ---

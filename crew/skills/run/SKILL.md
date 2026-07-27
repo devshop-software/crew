@@ -1,6 +1,7 @@
 ---
 name: run
 description: "Autonomous orchestrator loop that drives each agent-ready GitHub issue to a ready-for-review MR in its own per-ticket worktree by dispatching crew:implementation → qa → reviewer (capped fix loop) → mr-review → ui-review (UI-labelled tickets only) → findings, never doing the domain work itself and never waiting for a human merge. Use when the user invokes /crew:run."
+effort: high
 metadata:
   type: orchestrator
   mode: loop
@@ -347,7 +348,7 @@ You will not:
 Every phase is dispatched the same way via the Agent tool; this contract is the point of the orchestrator — it owns dispatch and bookkeeping, not the work.
 
 - **Agent type:** `agent_type: crew:<phase>` (`crew:implementation`, `crew:qa`, `crew:reviewer`, `crew:mr-review`, `crew:ui-review`, `crew:findings`).
-- **Model / effort:** `model: opus`, `effort: ultracode`. The heavy reasoning lives in the agents; you stay thin.
+- **Model / effort:** each agent declares its own `model` and `effort` in its frontmatter — pass neither at dispatch (the Agent tool has no `effort` parameter, and a `model` override would only shadow what the agent already declares). The heavy reasoning lives in the agents; you stay thin.
 - **Working directory:** the ticket's worktree path. Do **not** set `isolation: worktree` — you own the single per-ticket worktree; per-agent worktrees would split the work.
 - **Background:** dispatch the long phases (implementation, qa, fix-loop rounds) with `run_in_background: true` so you stay responsive to status queries; reviewer and mr-review can run foreground.
 
