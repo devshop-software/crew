@@ -99,12 +99,13 @@ For each command key, pick the best real command from what the scan found by rea
 | `test-cmd` | `package.json` → `test` / `test:unit`; else `cargo test`, `go test ./...`, `pytest`, `just test`. |
 | `lint-cmd` | `package.json` → `lint`; else `eslint .`, `ruff check`, `golangci-lint run`. |
 | `build-cmd` | `package.json` → `build` / `typecheck`; else `cargo build`, `go build ./...`, `tsc --noEmit`. |
-| `e2e-cmd` | From the detected e2e framework: `npx playwright test`, `npx cypress run`, `pytest tests/e2e/`. |
+| `e2e-cmd` | From the detected e2e framework, preferring an existing **serial/CI script variant** (`e2e:ci`, `test:e2e:ci` — typically `CI=true …`, which pins Playwright to `workers: 1`) over the interactive one: `/crew:run` holds a live app stack per ticket and peer runs share the host, so the framework's default parallelism spawns a browser set per worker and can exhaust host memory mid-run. Where the project has no such variant, pin the bound explicitly — `npx playwright test --workers=1`, `npx cypress run`, `pytest tests/e2e/ -p no:xdist`. |
 | `e2e-framework` | `playwright` / `cypress` / `pytest` / etc., or `none` if absent. |
 
 You will not:
 
 - Write a command that does not exist in the project — an honest `none` beats a command that fails mid-run.
+- Record an `e2e-cmd` that runs at the framework's default parallelism when a serial/CI variant exists — a browser set per worker, on a host already carrying a live stack per ticket, is what exhausts memory and takes every concurrent run down with it.
 
 ---
 
