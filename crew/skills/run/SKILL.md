@@ -1,6 +1,6 @@
 ---
 name: run
-description: "Autonomous orchestrator loop that drives each agent-ready GitHub issue to a ready-for-review MR in its own per-ticket worktree by dispatching crew:implementation → qa → reviewer (capped fix loop) → mr-review → ui-review (UI-labelled tickets only) → findings, never doing the domain work itself and never waiting for a human merge. Use when the user invokes /crew:run."
+description: "Autonomous orchestrator loop that drives each agent-ready GitHub issue to a ready-for-review MR in its own per-ticket worktree by dispatching crew:implementation → qa → reviewer (capped fix loop) → mr-review → ui-review (UI-labelled tickets only) → a once-per-ticket cleanup pass that fixes the mechanical advisory findings in place → findings, never doing the domain work itself and never waiting for a human merge. Use when the user invokes /crew:run."
 effort: high
 metadata:
   type: orchestrator
@@ -56,7 +56,7 @@ You will not:
 
 ## The Loop
 
-Preflight (above) runs once; **Steps 1–13 are one ticket** (plus the optional `crew:ui-review` gate, Step 10b, on UI-labelled tickets), and after Step 13 the loop returns to Step 1. The loop ends only when Step 1 finds no **actionable** ticket — go to the Run Summary, never invent work or relax the label filter.
+Preflight (above) runs once; **Steps 1–13 are one ticket** (plus the optional `crew:ui-review` gate, Step 10b, on UI-labelled tickets, and the once-per-ticket cleanup pass, Step 10c), and after Step 13 the loop returns to Step 1. The loop ends only when Step 1 finds no **actionable** ticket — go to the Run Summary, never invent work or relax the label filter.
 
 A unit can bounce back for fixes, and those bounces share a **single 3-round budget** across every fix trigger — a reviewer FAIL, a red required check on the MR, an mr-review CRITICAL bounce, and a ui-review FAIL all draw from the same cap. **You own the counters:** a monotonic **fix-round number `F`** (incremented on every fix-mode dispatch, any trigger) and a **review-round number `R`** (incremented on every `crew:reviewer` dispatch), passed into each dispatch so the agents label their comments consistently and never recount. At-cap is **escalate-and-advance** — leave the MR draft, comment, park the card, move to the next ticket — never halt the whole loop on one stuck ticket.
 
@@ -140,7 +140,7 @@ The worktree is **per ticket and owned by you**; every agent for this ticket wor
 4. Copy gitignored local env files (`.env`, `.env.local` if present) from the current checkout into the new worktree — a fresh checkout won't have them.
 5. All subsequent dispatches set the agent's working directory to `<worktree-path>`.
 6. Initialize the `progress_log` path: `${TMPDIR:-/tmp}/crew/<owner>-<repo>/<issue#>/progress_log.md`. `mkdir -p` its parent; this path is **outside** the repo and **never** committed. Pass it into every agent prompt.
-7. Announce the plan in one line: `Ticket #<n> "<title>" → worktree <path>, branch <branch>. Running implementation → qa → reviewer → mr-review → ui-review (if UI-labelled) → findings.`
+7. Announce the plan in one line: `Ticket #<n> "<title>" → worktree <path>, branch <branch>. Running implementation → qa → reviewer → mr-review → ui-review (if UI-labelled) → cleanup → findings.`
 
 You will not:
 
@@ -247,7 +247,7 @@ After a reviewer PASS, wait for the MR's required checks to settle and branch on
 2. **All required checks green →** proceed to Step 10 (mr-review) on this stable diff.
 3. **Any required check red →** treat it exactly like a reviewer FAIL: post an `## orchestrator — CI <kind> failure (fix round F triggered)` comment linking the failing run, then run the Step 8 **fix loop** scoped to the CI failure (`crew:implementation` fix mode with the incremented `F`, re-run `crew:qa` if the failure is test-related, then re-confirm CI). **Same 3-round cap** — a CI failure the agent can't get green within the budget **escalates** like any other.
 4. **Checks never appear or won't settle green and you're tempted to re-trigger →** first read `gh pr view <MR> --json mergeable,mergeStateStatus`: a `CONFLICTING` / `DIRTY` / `BEHIND` branch can't produce a green merge-ref check no matter how many times you re-trigger CI — the base advanced under the run (§4.15), so this is a **conflict, not a CI flake**. Route it through the Step 8 fix loop (`crew:implementation` fix mode, same 3-round cap) to merge the freshly-fetched base in and resolve, push, then re-gate CI on the now-clean branch — never loop re-triggering CI against a conflicted branch.
-5. If a commit *does* land after mr-review (a late CI fix), **re-dispatch mr-review** (Step 10) on the new diff before finalize.
+5. If a commit *does* land after mr-review (a late CI fix, or a cleanup commit that touched non-test source — Step 10c), **re-dispatch mr-review** (Step 10) on the new diff before finalize.
 
 #### CI unavailable — provider outage only (§4.9, FT-23)
 
@@ -268,7 +268,7 @@ Runs only after a reviewer PASS **and a green CI gate (Step 9)**, so it always r
 1. Task: review the **MR diff cold** — code smells, duplication, dead code, leaky abstractions, naming, complexity, test quality. It does **not** read the other agents' comments, the reviewer's verdict, or the `progress_log` — independence is the point. Post an MR comment with its findings.
 2. After it returns: read its MR comment.
 3. A **CRITICAL** smell may bounce back to implementation **once**, and that bounce **counts toward the shared 3-round fix cap** (treat it like a fix-loop round routed through Step 8 — increment `F`, then re-confirm CI green per Step 9 and re-dispatch mr-review on the new diff); if the cap is already exhausted, escalate instead.
-4. **MAJOR / MINOR** findings are advisory — record them, proceed to Step 11.
+4. **MAJOR / MINOR** findings are advisory — record them and proceed to the next step (Step 10b on a UI-labelled ticket, otherwise Step 10c); the cleanup pass fixes the mechanical ones in place and `crew:findings` files the rest. When this dispatch was the **cleanup pass's re-gate**, proceed to **Step 11** instead — the cleanup runs once per ticket.
 5. **Breakpoint `mr-review`** → pause here.
 
 You will not:
@@ -278,12 +278,12 @@ You will not:
 
 ### Step 10b — Dispatch ui-review (optional · UI-labelled tickets only)
 
-Runs only after `mr-review` clears, and **only when the ticket carries the configured `ui-label`** — otherwise skip straight to Step 11. Dispatch `crew:ui-review` to measure the built UI's whole assembled route against the design the design MCP serves, driving the stack you brought up in Step 5; a FAIL is a fix trigger inside the shared cap, and a BLOCKED means the design source is missing and escalates.
+Runs only after `mr-review` clears, and **only when the ticket carries the configured `ui-label`** — otherwise skip straight to Step 10c. Dispatch `crew:ui-review` to measure the built UI's whole assembled route against the design the design MCP serves, driving the stack you brought up in Step 5; a FAIL is a fix trigger inside the shared cap, and a BLOCKED means the design source is missing and escalates.
 
-1. **Gate on the label.** Read the issue's labels (`gh issue view <n> --json labels`); if it does **not** carry the `ui-label` (or `ui-label` is `none`/unset), skip this step and go to Step 11 — the gate is opt-in per ticket.
+1. **Gate on the label.** Read the issue's labels (`gh issue view <n> --json labels`); if it does **not** carry the `ui-label` (or `ui-label` is `none`/unset), skip this step and go to Step 10c — the gate is opt-in per ticket.
 2. Task: read the issue (the in-scope UI route) + the diff, pull the source-of-truth design from the **design MCP** (discovering the project that matches this app), drive the running stack (Step 5's base URL) with Playwright, and **measure the whole assembled route** with the committed fidelity tool (computed type + the font-load fact) against the design; post an MR comment with a **PASS / FAIL / BLOCKED** verdict and the measured deltas by severity. It changes no code. Pass it the current round `R`.
 3. After it returns: read its MR comment and extract the verdict.
-4. **PASS →** go to Step 11 (findings). **FAIL →** route through the Step 8 **fix loop** (`crew:implementation` fix mode scoped to the visual deltas, increment `F`, **shared 3-round cap**), then re-gate CI (Step 9) and re-run the later gates on the new diff — `crew:mr-review` (Step 10), then `crew:ui-review` again — before finalize; at the cap, **escalate** (Step 8's escalate path). **BLOCKED →** the design source is unavailable (no `design` server in `.mcp.json` / no matching design project); **escalate** — leave the MR draft, post an escalation comment that this UI ticket could not be visually verified because the design MCP is not provisioned (re-run `/crew:adjust`), move the card to the needs-human / blocked column (board only), and continue to the next ticket.
+4. **PASS →** go to Step 10c (the cleanup pass). **FAIL →** route through the Step 8 **fix loop** (`crew:implementation` fix mode scoped to the visual deltas, increment `F`, **shared 3-round cap**), then re-gate CI (Step 9) and re-run the later gates on the new diff — `crew:mr-review` (Step 10), then `crew:ui-review` again — before finalize; at the cap, **escalate** (Step 8's escalate path). **BLOCKED →** the design source is unavailable (no `design` server in `.mcp.json` / no matching design project); **escalate** — leave the MR draft, post an escalation comment that this UI ticket could not be visually verified because the design MCP is not provisioned (re-run `/crew:adjust`), move the card to the needs-human / blocked column (board only), and continue to the next ticket.
 5. **Breakpoint `ui-review`** → pause here.
 
 You will not:
@@ -292,11 +292,29 @@ You will not:
 - Treat a BLOCKED as a pass — a UI ticket that can't reach its design source escalates, so the missing design MCP surfaces instead of shipping unverified visuals.
 - Bounce a ui-review FAIL outside the shared 3-round cap — it draws from the same budget as a reviewer FAIL, red CI, and an mr-review CRITICAL.
 
+### Step 10c — Dispatch the cleanup pass
+
+Runs after `mr-review` clears — and, on a UI-labelled ticket, after `crew:ui-review` PASSes — and **before** `crew:findings`, once per ticket: dispatch `crew:implementation` in **cleanup mode** to fix the small mechanical advisory findings in place rather than pay a whole follow-up ticket for each. It is **not a fix round** (it draws on none of the 3-round cap) and it is **non-blocking** — if it can't run, `crew:findings` files everything exactly as before.
+
+1. Task: read the **final** `crew:reviewer`, `crew:mr-review`, and (UI-labelled tickets) `crew:ui-review` comments, select only the **mechanical, non-behavioral** advisory items inside the files this MR's diff already touches (capped at 8 items / ~150 lines), fix them one attempt each, get `lint`/`test`/`build` green, commit one `chore: review cleanup (#<issue>)` to the same branch, and post the per-item `fixed` / `skipped` ledger comment. It files no tickets.
+2. After it returns: read its ledger comment and take the status — `CLEANED <n>/<m>`, `NOTHING`, or `BLOCKED`.
+3. **`NOTHING` or `BLOCKED` →** nothing was committed and the branch is untouched, so go straight to Step 11 (findings), which files every advisory finding as usual.
+4. **`CLEANED` →** re-gate the new commit: **re-confirm CI green (Step 9)** always, and **re-dispatch `crew:mr-review` (Step 10)** whenever the cleanup commit touched anything **outside test files** (a pass that only tightened tests or comments needs the CI gate alone); eligibility forbids any change to rendered output, so `crew:ui-review` does **not** re-run. Once that re-gate clears, go straight to **Step 11** — neither Step 10b nor this step runs again.
+5. **A red check or an mr-review `BOUNCE` on that re-gate →** route it through the Step 8 fix loop like any other, counting toward the shared 3-round cap — never re-enter cleanup.
+6. **Breakpoint `cleanup`** → pause here.
+
+You will not:
+
+- Dispatch cleanup more than once per ticket, or re-enter it after its re-gate bounced — the pass runs once and its own fallout is handled by the normal fix loop.
+- Count the cleanup pass against the 3-round fix cap — it is not a fix round; only the fix rounds its re-gate triggers are.
+- Finalize on a cleanup commit that has not been re-gated — CI always, plus `crew:mr-review` whenever it touched anything outside test files.
+- Hold up the ticket on a cleanup `BLOCKED` or `NOTHING` — it is non-blocking; go to Step 11 and let `crew:findings` file the lot.
+
 ### Step 11 — Dispatch findings
 
-After `mr-review` clears (`PROCEED`, or a `BOUNCE` resolved and re-cleared) — and, for a UI-labelled ticket, after `crew:ui-review` has PASSed (Step 10b) — and **before finalizing**, dispatch `crew:findings` once so the advisory findings don't evaporate (§5.8). It is **non-blocking** — a `crew:findings` failure is logged and does not hold up finalize.
+After `mr-review` clears (`PROCEED`, or a `BOUNCE` resolved and re-cleared), after `crew:ui-review` has PASSed on a UI-labelled ticket (Step 10b), and after the cleanup pass has run (Step 10c) — and **before finalizing** — dispatch `crew:findings` once so the advisory findings don't evaporate (§5.8). It is **non-blocking** — a `crew:findings` failure is logged and does not hold up finalize.
 
-1. Task: read the **final** `crew:reviewer`, `crew:mr-review`, and (on a UI-labelled ticket) `crew:ui-review` MR comments, extract their **non-blocking** findings (MINOR, advisory MAJOR, out-of-scope-of-this-MR), **dedup against what open `review-followup` issues already enumerate**, and **consolidate each surviving finding into a cohesive `review-followup` sweep ticket** — bucketed by kind × area, appended to an open bucket sweep or opened fresh — labeled **`review-followup`** and **`agent-ready`** (UI-fidelity sweeps also carrying the **`ui-label`** so `crew:ui-review` verifies them) and **blocked by every contributing source ticket** (each issue a feeding MR `Closes`, via a GitHub blocked-by dependency on its numeric database id, so GitHub auto-unblocks the sweep once every source merges) — each item backlinking the MR + comment, file refs, severity. Post a short `crew:findings` summary comment on the MR listing the sweep URLs (or "no actionable findings").
+1. Task: read the **final** `crew:reviewer`, `crew:mr-review`, and (on a UI-labelled ticket) `crew:ui-review` MR comments plus the **cleanup ledger** (Step 10c), extract their **non-blocking** findings (MINOR, advisory MAJOR, out-of-scope-of-this-MR), record every item the ledger marks `fixed` as **fixed inline** rather than filing it, **dedup the rest against what open `review-followup` issues already enumerate**, and **consolidate each surviving finding into a cohesive `review-followup` sweep ticket** — bucketed by kind × area, appended to an open bucket sweep or opened fresh — labeled **`review-followup`** and **`agent-ready`** (UI-fidelity sweeps also carrying the **`ui-label`** so `crew:ui-review` verifies them) and **blocked by every contributing source ticket** (each issue a feeding MR `Closes`, via a GitHub blocked-by dependency on its numeric database id, so GitHub auto-unblocks the sweep once every source merges) — each item backlinking the MR + comment, file refs, severity. Post a short `crew:findings` summary comment on the MR listing the sweep URLs (or "no actionable findings").
 2. The sweeps are **`review-followup`- and `agent-ready`-labeled** and **blocked by every contributing source ticket** until those MRs merge, so the loop **auto-picks each up once all its sources merge and unblock it** — no human promotion needed; the blocked-by dependencies are what hold it out of the loop until then.
 3. **Breakpoint `findings`** → pause here.
 
@@ -307,7 +325,7 @@ You will not:
 
 ### Step 12 — Tear down, finalize, and advance
 
-On overall pass (reviewer PASS, **CI green** (Step 9), mr-review cleared, `crew:ui-review` PASSed (UI-labelled tickets), and `crew:findings` has run (Step 11)), tear down the stack, finalize the MR to ready-for-review, and advance. The branch and MR remain on the remote for a human to merge.
+On overall pass (reviewer PASS, **CI green** (Step 9), mr-review cleared, `crew:ui-review` PASSed (UI-labelled tickets), the cleanup pass run and any commit it made re-gated (Step 10c), and `crew:findings` has run (Step 11)), tear down the stack, finalize the MR to ready-for-review, and advance. The branch and MR remain on the remote for a human to merge.
 
 #### Tear down the stack
 
@@ -394,7 +412,8 @@ On every (re)start, before picking a fresh ticket, reconstruct in-flight state f
    - Latest reviewer comment is **PASS** but the MR has a **red required check** → resume in the **CI fix loop** (Step 9), counting prior fix rounds toward the cap.
    - Latest reviewer comment is **PASS**, CI green, no mr-review comment → resume at **Step 10** (mr-review).
    - mr-review comment present, the ticket carries the **`ui-label`**, and there is **no `crew:ui-review` comment yet** (or its latest is FAIL/BLOCKED unresolved) → resume at **Step 10b** (ui-review).
-   - mr-review comment present (and, for a UI-labelled ticket, `crew:ui-review` has **PASSed**), **no `crew:findings` comment yet**, MR still draft → confirm CI is green and that no commit post-dates the last gate comment (if one does, re-run Step 9/10/10b), then resume at **Step 11** (findings).
+   - mr-review comment present (and, for a UI-labelled ticket, `crew:ui-review` has **PASSed**), **no `crew:implementation — cleanup` comment yet**, MR still draft → confirm CI is green and that no commit post-dates the last gate comment (if one does, re-run Step 9/10/10b), then resume at **Step 10c** (the cleanup pass).
+   - `crew:implementation — cleanup` comment present, **no `crew:findings` comment yet**, MR still draft → if it is `CLEANED`, finish its re-gate first (CI per Step 9, plus `crew:mr-review` when the cleanup commit touched non-test source), then resume at **Step 11** (findings); never re-dispatch cleanup.
    - `crew:findings` comment present and the MR is still draft → resume at **Step 12** (finalize).
 4. **Re-attach the worktree:** if the per-ticket worktree still exists, reuse it; if it was removed but the ticket isn't finalized, recreate it (off the bare clone if present, else the existing checkout) from the existing remote branch (`git worktree add <path> <branch>`). Re-derive the `progress_log` path; a surviving `progress_log` is a hint, not the truth — if it disagrees with the MR comments, trust the comments.
 5. **Bring the stack back up** (Step 5) before resuming at any phase that needs it (qa, reviewer, ui-review); tear it down at finalize.
@@ -407,6 +426,7 @@ On every (re)start, before picking a fresh ticket, reconstruct in-flight state f
 When Step 1 finds no actionable ticket, stop and report; then do not poll for new tickets unless re-invoked.
 
 - **Shipped:** each ticket taken to ready-for-review this run — issue #, title, MR URL.
+- **Fixed inline:** the count of advisory findings the cleanup pass (Step 10c) fixed in place per ticket, with the cleanup commit sha — the work that never became a follow-up ticket.
 - **Findings filed:** the (`review-followup`- and `agent-ready`-labeled, MR-blocked) sweep tickets `crew:findings` filed into this run — **created or appended-to**, with their issue #s — so the human sees what will auto-enter the loop once each sweep's source MRs all merge.
 - **Escalated:** each ticket that hit the 3-round cap — issue #, MR URL (still draft), the column it was parked in, and the recurring finding.
 - **Skipped:** each ticket triaged out this run — issue #, and whether it was a blocker (with the reason) or an epic/parent.
@@ -444,7 +464,7 @@ Never hardcode an org, repo, board, label, or column — read them fresh from `.
 
 ## Breakpoints
 
-Default: **fully autonomous** — no pausing. If the invocation includes `--breakpoint <phase>` (`implement` | `qa` | `review` | `mr-review` | `ui-review` | `findings`), let that phase's subagent finish normally, then:
+Default: **fully autonomous** — no pausing. If the invocation includes `--breakpoint <phase>` (`implement` | `qa` | `review` | `mr-review` | `ui-review` | `cleanup` | `findings`), let that phase's subagent finish normally, then:
 
 1. Confirm the phase's MR comment posted.
 2. Report: "Paused after `<phase>` on ticket #<n>. MR: <url>. Worktree: <path>. Re-invoke `/crew:run` to continue." The progress lives on the MR; nothing special is needed to resume — Resume picks it back up.
@@ -479,7 +499,8 @@ The hard boundaries on every run.
 - Escalate with full context at the cap — leave the MR draft, comment, park the card, and **move on to the next ticket**.
 - Flip the MR to ready-for-review and move the card to In review on overall pass, then **continue without waiting for a human merge**.
 - On a **UI-labelled ticket**, after `mr-review` clears, dispatch **`crew:ui-review`** (Step 10b) to verify the built UI against the design the design MCP serves; a FAIL is a fix trigger in the **shared 3-round cap**, and a **BLOCKED** (design MCP not provisioned) **escalates** rather than shipping unverified visuals. Skip the gate when the ticket lacks the `ui-label` or `ui-label` is `none`.
-- After `mr-review` clears (and `crew:ui-review` has PASSed, for a UI-labelled ticket), dispatch **`crew:findings`** (Step 11) to file the advisory reviewer / mr-review / ui-review findings as **`review-followup`- and `agent-ready`-labeled, MR-blocked** sweep tickets that auto-enter the loop once their source MRs all merge, before finalizing. It's non-blocking; a failure doesn't hold up the MR.
+- After `mr-review` clears (and `crew:ui-review` has PASSed, for a UI-labelled ticket), dispatch the **cleanup pass** (Step 10c) — `crew:implementation` in cleanup mode, **once per ticket**, outside the 3-round fix cap — to fix the mechanical advisory findings in place instead of filing a follow-up ticket for each; then re-gate its commit (CI always, `crew:mr-review` when it touched non-test source) before finalize. It is non-blocking: `NOTHING`, `BLOCKED`, or a failure just means `crew:findings` files everything.
+- After the cleanup pass, dispatch **`crew:findings`** (Step 11) to file the advisory reviewer / mr-review / ui-review findings as **`review-followup`- and `agent-ready`-labeled, MR-blocked** sweep tickets that auto-enter the loop once their source MRs all merge, before finalizing. It's non-blocking; a failure doesn't hold up the MR.
 - **Keep every command sandboxed, and never force a delete on the autonomous path** — `dangerouslyDisableSandbox`, `rm -rf`, and `git worktree remove --force` all raise the sandbox's own approval prompt and stall the run even under skip-permissions. Poll readiness sandboxed; remove the worktree with the plain non-forced `git worktree remove` and **leave-and-log if it refuses** rather than forcing it (§4.10).
 - **Verify every GitHub write landed** — re-fetch and confirm a comment / body-edit / label / card-move / state-flip actually took effect; edit MR bodies with `gh api -X PATCH`, never `gh pr edit` (§4.11).
 - **Act as the crew bot — your primary identity (§4.17).** With a `crew-identity` block configured, the bot App token is the identity for every read and write: pass it **inline in the same shell as each git/GitHub write** (`GH_TOKEN="$(<token-helper>)" gh …` — never a prior `export`), set the bot git author, treat an unset token at a write as a hard-stop, and verify bot-attribution after (§4.11); **a failed mint under a configured identity is a hard-stop — never fall back to the human.** Drop to the user login only for an org-scoped read the App can't do; no block → ambient user login throughout.
@@ -532,7 +553,10 @@ If you catch yourself thinking any of these, stop.
 - _"The user wrote `crew update` once, I should mention the npm flow"_ — STOP. V2 is a plugin only. No npm, no CLI, no distribution references.
 - _"I'll disable the sandbox just for the readiness curl"_ — STOP. `dangerouslyDisableSandbox` prompts a human and stalls the whole autonomous run, even under skip-permissions. Poll sandboxed; work around failures sandboxed (§4.10).
 - _"The worktree didn't remove cleanly, I'll add `--force` or just `rm -rf` it"_ — STOP. A forced or recursive delete trips the sandbox's own approval prompt and stalls the run, even under skip-permissions (§4.10). Use the plain `git worktree remove`; if it refuses, **leave the tree and log it** for a later `git worktree prune` — never force it mid-run.
-- _"mr-review passed, I'll finalize now — the MINOR findings are only advisory"_ — STOP. Dispatch `crew:findings` first (Step 11) to file them as **`review-followup`- and `agent-ready`-labeled, MR-blocked** sweep tickets that auto-enter the loop once their sources all merge. Advisory findings shouldn't evaporate.
+- _"mr-review passed, I'll finalize now — the MINOR findings are only advisory"_ — STOP. Run the cleanup pass (Step 10c), then dispatch `crew:findings` (Step 11) to file what's left as **`review-followup`- and `agent-ready`-labeled, MR-blocked** sweep tickets that auto-enter the loop once their sources all merge. Advisory findings shouldn't evaporate.
+- _"The cleanup pass committed, and every gate already passed — straight to finalize."_ — STOP. A cleanup commit is a commit like any other: re-confirm CI (Step 9) always, and re-dispatch `crew:mr-review` (Step 10) whenever it touched anything outside test files. Finalizing on an un-re-gated commit ships code no gate has seen.
+- _"Cleanup only fixed 3 of 9 findings — I'll send it back round for the other 6."_ — STOP. The pass runs **once** per ticket, by design; the six it skipped are exactly what `crew:findings` files as a sweep. Re-entering it turns a bounded tidy into an unbounded refactor loop.
+- _"Cleanup came back BLOCKED, so the ticket is stuck."_ — STOP. It is non-blocking and nothing was committed — the branch is exactly as `mr-review` saw it. Go to Step 11 and let `crew:findings` file every finding, as it did before the pass existed.
 - _"It's a UI-labelled ticket but the design MCP isn't set up — I'll let it finalize anyway."_ — STOP. On a `ui-label` ticket, `crew:ui-review` (Step 10b) runs before findings; a **BLOCKED** verdict (no design source) **escalates** so the missing design MCP gets wired (`/crew:adjust`) — never finalize unverified visuals. A **FAIL** is a fix round in the shared cap, not something to wave through.
 - _"`gh pr edit` exited non-zero but it probably worked"_ — STOP. Use `gh api -X PATCH` and **re-fetch to confirm** the write landed. GitHub is the source of truth; a silent no-op corrupts it (§4.11).
 - _"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."_ — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop** (§4.17), not a fallback to the human. Only an *absent* block runs as the user.

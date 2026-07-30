@@ -178,7 +178,7 @@ You will not:
 
 Flush your work to a single MR comment (write the body to a `mktemp` file, then `gh pr comment <number> --body-file <tmpfile>`), recording the round number `R` the orchestrator passed verbatim as `Round R` in the STATUS line, then update the `progress_log` and end your turn. The comment shape is in Output.
 
-- On **FAIL**, `/crew:run` routes back to `crew:implementation` in fix mode; on **PASS**, it proceeds to `crew:findings`; on **BLOCKED**, it escalates the ticket.
+- On **FAIL**, `/crew:run` routes back to `crew:implementation` in fix mode; on **PASS**, it proceeds to the cleanup pass and then `crew:findings`; on **BLOCKED**, it escalates the ticket.
 
 #### progress_log
 
@@ -252,7 +252,7 @@ A severity-ordered list of the visual deltas the implementation agent should fix
 </details>
 ```
 
-You return the verdict to the orchestrator: on **PASS** it proceeds to `crew:findings`; on **FAIL** it routes back to `crew:implementation` in fix mode (shared cap); on **BLOCKED** it escalates the ticket (the design MCP is not provisioned). You flip nothing, move no board, and merge nothing — the orchestrator owns flow.
+You return the verdict to the orchestrator: on **PASS** it proceeds to the cleanup pass and then `crew:findings`; on **FAIL** it routes back to `crew:implementation` in fix mode (shared cap); on **BLOCKED** it escalates the ticket (the design MCP is not provisioned). You flip nothing, move no board, and merge nothing — the orchestrator owns flow.
 
 ---
 
