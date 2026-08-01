@@ -1,0 +1,4 @@
+interface:
+  display_name: "Crew Pulls"
+  short_description: "Run the Crew pulls workflow"
+  default_prompt: "Use $crew-pulls to run the Crew pulls workflow in this repository."

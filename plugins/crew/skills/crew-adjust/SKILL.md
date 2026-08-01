@@ -1,15 +1,13 @@
 ---
-name: adjust
-description: "Onboards a project for the crew loop: detects and validates the toolchain and GitHub wiring, sets up the required crew bot identity, and writes the single `.crew.rc` config (plus a `.mcp.json`) every other crew component reads. Use when the user invokes /crew:adjust."
-effort: xhigh
-metadata:
-  type: regular
-  mode: single-execution
+name: crew-adjust
+description: "Onboards a project for the crew loop: detects and validates the toolchain and GitHub wiring, sets up the required crew bot identity, and writes the single `.crew.rc` config (plus a `.mcp.json`) every other crew component reads. Use when the user invokes $crew-adjust or asks Codex to run the crew adjust workflow."
 ---
 
 # Adjust
 
 ## Role
+
+This is the Codex adapter generated from the canonical Claude workflow. Resolve `CREW_PLUGIN_ROOT` from this loaded `SKILL.md` by walking up two directories, hold that absolute value for every packaged schema/script command, and never treat the target repository as the plugin root.
 
 You are a project-onboarding engineer who scans a project, detects and validates its toolchain and GitHub wiring, and writes a single `.crew.rc` config file at the repo root that every downstream crew component reads at runtime.
 
@@ -27,13 +25,13 @@ You:
 
 ## When to Apply
 
-Activate when called from the `/crew:adjust` command. Otherwise stay idle.
+Activate when the user explicitly invokes `$crew-adjust`. Otherwise stay idle.
 
 ## Input Handling
 
-Read `$ARGUMENTS` to choose the scope of the run.
+Read any text following `$crew-adjust` in the user prompt to choose the scope of the run.
 
-| `$ARGUMENTS` | Scope |
+| Invocation text | Scope |
 |--------------|-------|
 | empty | Full project scan (default). |
 | `update` | Re-scan and reconcile against the existing `.crew.rc` (see **Update Mode**). |
@@ -62,8 +60,8 @@ You will not:
 Find out whether the project already carries a `.crew.rc` so a re-run reconciles the existing file.
 
 1. Look for `.crew.rc` at the repo root, walking upward from CWD until found, as every other component does.
-2. If it exists and `$ARGUMENTS` is empty, ask **"A `.crew.rc` already exists. Update it, or start fresh?"** and wait.
-3. If `$ARGUMENTS` is `update`, go to **Update Mode**.
+2. If it exists and no text follows `$crew-adjust`, ask **"A `.crew.rc` already exists. Update it, or start fresh?"** and wait.
+3. If the text following `$crew-adjust` is `update`, go to **Update Mode**.
 4. If you find a legacy `## Workflow Config` block in `CLAUDE.md` but **no** `.crew.rc`, this project was onboarded by an older crew version — say so and onboard it fresh into `.crew.rc` (there is no in-place migration to build).
 
 You will not:
@@ -99,7 +97,7 @@ For each command key, pick the best real command from what the scan found by rea
 | `test-cmd` | `package.json` → `test` / `test:unit`; else `cargo test`, `go test ./...`, `pytest`, `just test`. |
 | `lint-cmd` | `package.json` → `lint`; else `eslint .`, `ruff check`, `golangci-lint run`. |
 | `build-cmd` | `package.json` → `build` / `typecheck`; else `cargo build`, `go build ./...`, `tsc --noEmit`. |
-| `e2e-cmd` | From the detected e2e framework, preferring an existing **serial/CI script variant** (`e2e:ci`, `test:e2e:ci` — typically `CI=true …`, which pins Playwright to `workers: 1`) over the interactive one: `/crew:run` holds a live app stack per ticket and peer runs share the host, so the framework's default parallelism spawns a browser set per worker and can exhaust host memory mid-run. Where the project has no such variant, pin the bound explicitly — `npx playwright test --workers=1`, `npx cypress run`, `pytest tests/e2e/ -p no:xdist`. |
+| `e2e-cmd` | From the detected e2e framework, preferring an existing **serial/CI script variant** (`e2e:ci`, `test:e2e:ci` — typically `CI=true …`, which pins Playwright to `workers: 1`) over the interactive one: `$crew-run` holds a live app stack per ticket and peer runs share the host, so the framework's default parallelism spawns a browser set per worker and can exhaust host memory mid-run. Where the project has no such variant, pin the bound explicitly — `npx playwright test --workers=1`, `npx cypress run`, `pytest tests/e2e/ -p no:xdist`. |
 | `e2e-framework` | `playwright` / `cypress` / `pytest` / etc., or `none` if absent. |
 
 You will not:
@@ -144,7 +142,7 @@ The loop picks up open issues carrying an agent-ready label; the default is `age
 - Check whether it exists: `gh label list --search review-followup`; substitute if the project uses another name.
 - Record the chosen name as `review-followup-label` (offer to create it in **Step 13**).
 - `findings-assignee` (optional) — ask *"Assign `crew:findings`' follow-up tickets to a GitHub user? (a username, or none)"*; default to the onboarding user or `none`, and record it.
-- `mr-reviewer` (optional) — the GitHub user `/crew:run` requests as reviewer on each finished MR; default to the onboarding user or `none`, and record it.
+- `mr-reviewer` (optional) — the GitHub user `$crew-run` requests as reviewer on each finished MR; default to the onboarding user or `none`, and record it.
 
 #### The UI-review label
 
@@ -153,13 +151,13 @@ A ticket carrying this optional label gets the `crew:ui-review` visual-fidelity 
 - Check whether it exists: `gh label list --search ui`; substitute if the project uses another name, or set `ui-label: none` to disable the gate entirely (e.g. a backend/library project with no UI).
 - Record the chosen name as `ui-label` (offer to create it in **Step 13**).
 
-#### The planning labels (`/crew:pro`)
+#### The planning labels (`$crew-pro`)
 
-`/crew:pro` turns a rough ticket carrying an `instructions` label into a granular board, filing the tickets it plans under `agent-planned`, grouping each feature under an `epic` parent with its work tickets as native sub-issues, then auto-promoting the work tickets to `agent-ready` and closing the instruction ticket; the defaults are `instructions` / `agent-planned` / `epic`.
+`$crew-pro` turns a rough ticket carrying an `instructions` label into a granular board, filing the tickets it plans under `agent-planned`, grouping each feature under an `epic` parent with its work tickets as native sub-issues, then auto-promoting the work tickets to `agent-ready` and closing the instruction ticket; the defaults are `instructions` / `agent-planned` / `epic`.
 
 - Check each: `gh label list --search instructions` / `--search agent-planned` / `--search epic`; if the project uses other conventions, ask and substitute.
 - Record them as `instructions-label`, `planned-label`, and `epic-label` (offer to create any that are missing in **Step 13**).
-- These are independent of `agent-ready-label` — `/crew:pro` plans the `instructions` queue, files `agent-planned`, then auto-promotes the work tickets to `agent-ready`, which is the `/crew:run` queue.
+- These are independent of `agent-ready-label` — `$crew-pro` plans the `instructions` queue, files `agent-planned`, then auto-promotes the work tickets to `agent-ready`, which is the `$crew-run` queue.
 
 #### The board (optional)
 
@@ -179,11 +177,11 @@ Map each of the four named states the loop needs to a real column on the chosen 
 | `status-in-progress` | `In progress` | Where it moves a ticket it is working. |
 | `status-in-review` | `In review` | Where it parks the finished MR (a human merges later). |
 | `status-blocked` | `Blocked` (needs-human) | Where it escalates a ticket after the review fix-loop caps out. |
-| `status-done` | `Done` | Where `/crew:pulls` moves a card after its MR merges. |
+| `status-done` | `Done` | Where `$crew-pulls` moves a card after its MR merges. |
 
 #### The priority field
 
-`/crew:run` picks the highest-priority `agent-ready` ticket first, oldest within a tier; on GitHub, Priority is an org-level *Issue Field* (default options Urgent/High/Medium/Low) stored on the issue, not a Projects-v2 single-select.
+`$crew-run` picks the highest-priority `agent-ready` ticket first, oldest within a tier; on GitHub, Priority is an org-level *Issue Field* (default options Urgent/High/Medium/Low) stored on the issue, not a Projects-v2 single-select.
 
 1. Detect it via the org issue-fields GraphQL behind the `issue_fields` feature header — the REST `orgs/<owner>/issue-fields` path and any Projects-v2 field query both return blank (FT-29):
 
@@ -191,14 +189,14 @@ Map each of the four named states the loop needs to a real column on the chosen 
    gh api graphql -H "GraphQL-Features: issue_fields" -f query='query($o:String!){organization(login:$o){issueFields(first:50){nodes{__typename ... on IssueFieldSingleSelect{id name options{id name}}}}}}' -F o=<owner>
    ```
 
-2. Find the `IssueFieldSingleSelect` named `Priority` (or the project's convention); record its name as `priority-field` (default `Priority`) and its id as `priority-field-id` (e.g. `IFSS_…`) so `/crew:run` skips re-resolving it, and read the option order as the rank (Urgent highest).
+2. Find the `IssueFieldSingleSelect` named `Priority` (or the project's convention); record its name as `priority-field` (default `Priority`) and its id as `priority-field-id` (e.g. `IFSS_…`) so `$crew-run` skips re-resolving it, and read the option order as the rank (Urgent highest).
 3. Issue fields are org-only: on a user repo, or if the org has no Priority issue field, record `priority-field: none` and fall back to a `priority:*` label scheme if present (record as `priority-labels`, e.g. `high,medium,low`), else pure oldest-first.
 4. Reading issue fields (and the board) needs a token with org read scopes plus the `issue_fields` feature header; if the GraphQL query errors with `INSUFFICIENT_SCOPES`, tell the user to run `gh auth refresh -s read:project,read:org`.
 
 You will not:
 
 - Reuse `agent-ready` as the review-followup label — the two must stay distinct so `crew:findings` can identify and dedup its own follow-ups by the review-followup label (it applies `agent-ready` on top so they auto-enter the loop once unblocked).
-- Reuse `agent-ready` or `agent-planned` as the `instructions` label — `/crew:pro` would pick up its own planned output as new instructions; keep the three planning labels distinct from each other and from `agent-ready`.
+- Reuse `agent-ready` or `agent-planned` as the `instructions` label — `$crew-pro` would pick up its own planned output as new instructions; keep the three planning labels distinct from each other and from `agent-ready`.
 - Assume the board's column names — they vary per board, so read them with `gh project field-list` and map to the real strings.
 - Treat "no board" as a blocker — label-only selection is a supported mode (`board: none`).
 - Use the same-named empty-shell Priority field a project may expose (`gh project field-list` reports `options: []` for it) — the real values live on the issue.
@@ -207,13 +205,13 @@ You will not:
 
 ### Step 7 — Determine the branch convention
 
-Capture how branches are named and what they target, since each ticket gets one branch and one MR. The per-ticket worktree itself is created and owned by `/crew:run`; adjust records only the naming here, and owns the one-time bare-clone infrastructure separately in **Step 8**.
+Capture how branches are named and what they target, since each ticket gets one branch and one MR. The per-ticket worktree itself is created and owned by `$crew-run`; adjust records only the naming here, and owns the one-time bare-clone infrastructure separately in **Step 8**.
 
 | Key | Detection |
 |-----|-----------|
 | `branch-convention` | Default `crew/<issue#>-<slug>` (e.g. `crew/142-add-rate-limit`), where `<issue#>` ties the branch to its issue/MR and `<slug>` is a short kebab-case summary; if the repo has a convention (`git branch -r --sort=-committerdate \| head`), match it and substitute the placeholders. |
 | `base-branch` | `git symbolic-ref refs/remotes/origin/HEAD` → strip to `main` / `master`; this is what worktrees branch from and MRs target. |
-| `merge-method` | How `/crew:pulls` lands an MR — `squash` (default) / `merge` / `rebase`; match what the repo allows (`gh api repos/<owner>/<repo> --jq '{squash:.allow_squash_merge,merge:.allow_merge_commit,rebase:.allow_rebase_merge}'`). |
+| `merge-method` | How `$crew-pulls` lands an MR — `squash` (default) / `merge` / `rebase`; match what the repo allows (`gh api repos/<owner>/<repo> --jq '{squash:.allow_squash_merge,merge:.allow_merge_commit,rebase:.allow_rebase_merge}'`). |
 
 You will not:
 
@@ -223,7 +221,7 @@ You will not:
 
 ### Step 8 — Worktree infrastructure: offer the bare-clone migration (gated)
 
-The loop adds and removes a fresh worktree per ticket, which is cleanest off a bare-clone layout — a `.bare/` repo plus a primary worktree, with feature worktrees in their own directory. This is a one-time, gated migration; `/crew:run` falls back to adding worktrees off the existing checkout if the user declines.
+The loop adds and removes a fresh worktree per ticket, which is cleanest off a bare-clone layout — a `.bare/` repo plus a primary worktree, with feature worktrees in their own directory. This is a one-time, gated migration; `$crew-run` falls back to adding worktrees off the existing checkout if the user declines.
 
 #### Detect the current state
 
@@ -252,7 +250,7 @@ The target structure:
   .codex/             ← real dir at root when the project already has Codex config
   .mcp.json           ← shared across worktrees
   main/               ← worktree for the base branch (primary working copy)
-  wt/                 ← per-ticket worktrees (created by /crew:run)
+  wt/                 ← per-ticket worktrees (created by $crew-run)
 ```
 
 1. Use the migration mechanics in this section as the complete source of truth; do not reach into a developer checkout or another plugin version for hidden steps.
@@ -300,7 +298,7 @@ You will not:
 
 ### Step 9 — Detect and validate the stack-run config
 
-Both `crew:qa` (e2e) and `crew:reviewer` (Playwright) need the app running, and `/crew:run` — not the agents — brings it up per ticket. So capture how to start the stack, how to know it is ready, and how to keep each ticket's stack from colliding, then validate the recipe by running it.
+Both `crew:qa` (e2e) and `crew:reviewer` (Playwright) need the app running, and `$crew-run` — not the agents — brings it up per ticket. So capture how to start the stack, how to know it is ready, and how to keep each ticket's stack from colliding, then validate the recipe by running it.
 
 #### Start command (start-cmd)
 
@@ -327,7 +325,7 @@ Detect which knobs the project exposes so a run's stack comes up on issue-derive
 
 - which env vars set the port(s) (`PORT`, `APP_PORT`, compose `${PORT}` interpolation);
 - how data is namespaced (DB name/schema, a `COMPOSE_PROJECT_NAME` / container-name prefix, a Redis DB index, a test schema);
-- record the scheme as a recipe `/crew:run` evaluates per ticket, e.g. `PORT = <base-port> + (issue# mod N)` and `COMPOSE_PROJECT_NAME = <repo>-<issue#>`;
+- record the scheme as a recipe `$crew-run` evaluates per ticket, e.g. `PORT = <base-port> + (issue# mod N)` and `COMPOSE_PROJECT_NAME = <repo>-<issue#>`;
 - if the project exposes no port/data override, record `isolation-scheme: none` and warn that concurrent or local-dev collisions are possible.
 
 #### Validate it
@@ -353,7 +351,7 @@ The crew bot — a dedicated GitHub App shown as `<slug>[bot]` and natively Appr
 Tell the user: **"Crew runs as its own GitHub App bot (bot-authored comments/commits, human-Approvable PRs). This needs an org-owned App and its private key already created — give me the App id and key path, or create them first."** Then gather, broaden, and test before recording:
 
 1. Resolve the values — `app-id` (App settings page); `installation-id` (`gh api /orgs/<owner>/installations --jq '.installations[]|select(.app_slug=="<slug>")|.id'`); the bot git author, name `<slug>[bot]` and email `<bot-user-id>+<slug>[bot]@users.noreply.github.com` (`gh api '/users/<slug>[bot]' --jq .id`).
-2. Place the key + helper per machine, outside any repo — private key at `~/.config/crew/crew.pem` (`chmod 600`), and install the bundled helper `${CLAUDE_PLUGIN_ROOT}/scripts/gh-token.sh` → `~/.config/crew/gh-token.sh` (`chmod +x`).
+2. Place the key + helper per machine, outside any repo — private key at `~/.config/crew/crew.pem` (`chmod 600`), and install the bundled helper `${CREW_PLUGIN_ROOT}/scripts/gh-token.sh` → `~/.config/crew/gh-token.sh` (`chmod +x`).
 3. Advise the **full permission set** so the bot can operate 100% of the time — Repository: Contents, Issues, Pull requests (read & write), Metadata + Checks/Commit statuses (read); Organization: Projects (read & write, for the board) and Members (read), plus issue-field access where the App supports it. Tell the user to grant anything missing on the App settings page; whatever GitHub genuinely won't grant any App (e.g. the org Priority issue-field preview) stays a per-operation read the bot performs under the ambient user login at runtime — a platform limit, not an identity choice.
 4. Test it (mandatory) — mint a token (`CREW_APP_ID=<id> CREW_INSTALLATION_ID=<id> CREW_APP_PRIVATE_KEY_PATH=<path> ~/.config/crew/gh-token.sh`), confirm it reaches the repo (`curl -fsS -H "Authorization: token <token>" https://api.github.com/installation/repositories` lists it), and probe the org-scoped reads the loop relies on under the token (a Projects board read and the Priority issue-field GraphQL) so you know which the bot can do and which need the platform-limited user read.
 5. On a green test, record the `crew-identity` block (Step 11) and note any per-operation reads that need the user login. If the mint or the repo-reach fails, stop and report the likely cause (key path / which repos the App is installed on / missing permissions): crew needs its bot, so onboarding does not complete until the App is reachable — there is no run-as-your-own-account path.
@@ -374,8 +372,8 @@ The file is JSONC (JSON with `//` comments) at the repo root, everything nested 
 
 ```jsonc
 // .crew.rc — crew workflow configuration.
-// Written by /crew:adjust; read at the start of every crew run by /crew:run,
-// /crew:pulls, and every dispatched agent. Re-run /crew:adjust to keep it current.
+// Written by $crew-adjust; read at the start of every crew run by $crew-run,
+// $crew-pulls, and every dispatched agent. Re-run $crew-adjust to keep it current.
 // `none` means the project genuinely has no such value.
 {
   "$schema": "./.crew.schema.json",
@@ -388,15 +386,15 @@ The file is JSONC (JSON with `//` comments) at the repo root, everything nested 
     "e2e-framework": "playwright",
     "agent-ready-label": "agent-ready",
     "ui-label": "ui",                         // UI-gate: tickets with it get the crew:ui-review visual-fidelity gate (or none)
-    "instructions-label": "instructions",     // /crew:pro input — the rough ticket it plans
-    "planned-label": "agent-planned",         // /crew:pro — planner files here; epic parents stay, work tickets auto-promoted to agent-ready by the orchestrator
-    "epic-label": "epic",                     // /crew:pro epic parent grouping each feature's work tickets as native sub-issues
+    "instructions-label": "instructions",     // $crew-pro input — the rough ticket it plans
+    "planned-label": "agent-planned",         // $crew-pro — planner files here; epic parents stay, work tickets auto-promoted to agent-ready by the orchestrator
+    "epic-label": "epic",                     // $crew-pro epic parent grouping each feature's work tickets as native sub-issues
     "review-followup-label": "review-followup",
     "findings-assignee": "none",          // a GitHub user, or none
     "mr-reviewer": "none",                // a GitHub user, or none
     "board": "none",                      // Projects-v2 number / URL, or none
     "priority-field": "Priority",         // or none
-    "priority-field-id": "none",          // the org issue-field node id (IFSS_…) so /crew:run skips re-resolving, or none
+    "priority-field-id": "none",          // the org issue-field node id (IFSS_…) so $crew-run skips re-resolving, or none
     "status-todo": "TODO",
     "status-in-progress": "In progress",
     "status-in-review": "In review",
@@ -446,7 +444,7 @@ You will not:
 Once confirmed, write `.crew.rc` and its schema sidecar at the repo root, provision the two crew MCP servers in `.mcp.json` beside them, and leave only a MUST-READ pointer in canonical `CLAUDE.md`; create `AGENTS.md` as a symlink to it for Codex. V2 keeps no on-disk workflow state — there is no `_workflow/` directory or numbered state docs to scaffold, and the only working file (`progress_log`) lives outside the repo and is created by the agents at runtime.
 
 1. Write the confirmed `config` object to `.crew.rc` at the repo root, beside `CLAUDE.md` (the project root in a bare-clone layout), creating it or replacing it wholesale on an update.
-2. Copy the schema sidecar to the same root so the `$schema` pointer resolves for editor linting: `cp "${CLAUDE_PLUGIN_ROOT}/crew.schema.json" .crew.schema.json`.
+2. Copy the schema sidecar to the same root so the `$schema` pointer resolves for editor linting: `cp "${CREW_PLUGIN_ROOT}/crew.schema.json" .crew.schema.json`.
 3. Write `.mcp.json` at the same root, replacing any existing file wholesale, provisioning the two crew MCP servers — Playwright over stdio and the design server over HTTP — that the crew agents drive (`crew:qa` / `crew:reviewer` / `crew:ui-review`):
 
    ```json
@@ -484,18 +482,18 @@ After writing, surface the gaps that will bite the loop so the user can decide, 
 | Gap | Advice |
 |-----|--------|
 | No `agent-ready` label yet | Offer to create it: `gh label create <label> --color 0E8A16 --description "Ready for the crew loop"` — the loop needs at least one labeled issue to do anything. |
-| No `instructions` label yet | Offer to create it: `gh label create <instructions-label> --color FBCA04 --description "Rough ticket for /crew:pro to plan into a board"` — `/crew:pro` plans tickets carrying it (and without it you can't mark one). |
-| No `agent-planned` / `epic` label yet | `/crew:pro`'s planner self-creates `agent-planned` (and `epic` for each feature group) at runtime, but offer to pre-create them: `gh label create <planned-label> --color C5DEF5 --description "Planned by /crew:pro"`. |
+| No `instructions` label yet | Offer to create it: `gh label create <instructions-label> --color FBCA04 --description "Rough ticket for $crew-pro to plan into a board"` — `$crew-pro` plans tickets carrying it (and without it you can't mark one). |
+| No `agent-planned` / `epic` label yet | `$crew-pro`'s planner self-creates `agent-planned` (and `epic` for each feature group) at runtime, but offer to pre-create them: `gh label create <planned-label> --color C5DEF5 --description "Planned by $crew-pro"`. |
 | No `review-followup` label yet | Offer to create it: `gh label create <review-followup-label> --color 5319E7 --description "Review follow-up from crew — cohesive, MR-blocked backlog sweeps"` — without it `crew:findings` can't tag its follow-ups. |
 | No `ui` label yet | Offer to create it: `gh label create <ui-label> --color 1D76DB --description "UI ticket — gets the crew:ui-review visual-fidelity gate"` — tickets carrying it are verified against the design MCP before findings (skip if `ui-label: none`). |
 | No board | Fine — the loop runs label-only (oldest agent-ready issue first) and won't move cards; mention a board adds visible TODO → In review tracking and an escalation column. |
 | No e2e framework | Warn that `crew:qa` extends a whole-app e2e suite and has nothing to extend; suggest Playwright or Cypress without installing it. |
 | Playwright MCP needs Node/npx | The `playwright` server in `.mcp.json` starts via `npx @playwright/mcp@latest`; on a machine without Node it won't launch and qa/reviewer fall back to the project's own Playwright runner — install Node or accept the fallback. |
 | Fidelity tool prerequisites | `crew:ui-review`'s measured gate runs `extract-snippet.js` in the Playwright MCP browser and `compare.cjs` with `node` — both already provisioned for a UI project; on a box missing Node or a Chromium the gate degrades to BLOCKED rather than a silent pass. |
-| MCP servers load next session | `.mcp.json` is read by Claude Code at launch, so the two crew servers (Playwright + design) become available on the next session, not the current one. |
+| MCP servers load next session | The Codex plugin bundles the two crew servers; the root `.mcp.json` is the Claude Code adapter and becomes available to Claude Code on its next session. Restart either host after changing MCP configuration. |
 | No `start-cmd` (stack) | Warn that qa (e2e) and reviewer (Playwright) need the app running; suggest wiring a dev-server or `docker compose` target without fabricating one. |
 | No `isolation-scheme` | Note a per-ticket stack can collide with the dev's local stack (and blocks future parallelism); suggest a port env var and a data namespace knob (`COMPOSE_PROJECT_NAME`, a test schema). |
-| Standard worktree layout | Fine — `/crew:run` adds per-ticket worktrees off the existing checkout; mention the bare-clone migration (Step 8) keeps the repo root clean and is available later via `/crew:adjust update`. |
+| Standard worktree layout | Fine — `$crew-run` adds per-ticket worktrees off the existing checkout; mention the bare-clone migration (Step 8) keeps the repo root clean and is available later via `$crew-adjust update`. |
 | No lint command | Note the implementation/reviewer agents will skip lint checks. |
 | `progress_log` path not ignored | Usually a non-issue (it lives outside the repo); if the configured location ever lands inside the tree, recommend a `.gitignore` entry. |
 | Scope-limiting hooks | If they would help, explain them and let the user decide. |
@@ -517,7 +515,7 @@ Summarize the run in a few lines.
 5. **Stack** — `start-cmd`, readiness signal, isolation scheme; validated / failed / `none`.
 6. **MCP** — `.mcp.json` written with the two crew servers (Playwright + design); note if Node/npx is absent.
 7. **Gaps** — the advisories from Step 13.
-8. **Next** — either label an issue `agent-ready` and start `/crew:run`, or label a rough ticket `instructions` and run `/crew:pro` to plan it into a board (it auto-promotes the work tickets to `agent-ready` and closes the instruction ticket).
+8. **Next** — either label an issue `agent-ready` and start `$crew-run`, or label a rough ticket `instructions` and run `$crew-pro` to plan it into a board (it auto-promotes the work tickets to `agent-ready` and closes the instruction ticket).
 
 ---
 
@@ -548,7 +546,7 @@ The hard boundaries on every run.
 
 - Confirm GitHub auth and a default repo (Step 1) before writing anything — the loop is GitHub-driven.
 - Detect commands from actual project files, then run them to validate (Step 5).
-- Capture the full ticket-source + merge contract: `agent-ready-label`, the `/crew:pro` planning labels (`instructions-label` / `planned-label` / `epic-label`), `review-followup-label`, the board statuses (incl. `status-done` and a needs-human/blocked column), the `priority-field`, `branch-convention`, and `merge-method`.
+- Capture the full ticket-source + merge contract: `agent-ready-label`, the `$crew-pro` planning labels (`instructions-label` / `planned-label` / `epic-label`), `review-followup-label`, the board statuses (incl. `status-done` and a needs-human/blocked column), the `priority-field`, `branch-convention`, and `merge-method`.
 - Capture the stack-run config (`start-cmd`, `readiness-check`, `port`, `isolation-scheme`) and validate it by bringing the stack up under an issue-derived isolation and tearing it down.
 - Offer the bare-clone worktree migration only with explicit consent; record `worktree-layout` either way, and preserve the old repo on migration.
 - Set up the required crew bot identity: install the token-helper + key per machine and test it (mint a token, confirm repo reach) before recording the block, stopping onboarding if the bot can't be reached.

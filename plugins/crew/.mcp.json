@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest"
+      ]
+    },
+    "design": {
+      "type": "http",
+      "url": "https://api.anthropic.com/v1/design/mcp"
+    }
+  }
+}

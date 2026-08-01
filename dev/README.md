@@ -1,6 +1,6 @@
 # dev — skill dashboard
 
-Local-only tooling that renders the plugin's skills/agents to HTML and serves a browseable index. It is **not** part of the shipped plugin: the plugin is `../crew` (per `.claude-plugin/marketplace.json`), and everything here lives outside that subtree, adds no plugin dependencies, and is never loaded by Claude Code. The generated `output/` and `node_modules/` are gitignored.
+Local-only tooling that generates the Codex adapter, renders the canonical crew skills/agents to HTML, and serves a browseable index. It is **not** part of either shipped plugin: the Claude Code plugin is `../crew` and the generated Codex plugin is `../plugins/crew`. Everything here lives outside those runtime packages and is never loaded by either host. The generated dashboard `output/` and `node_modules/` are gitignored; the Codex plugin is checked in so a marketplace install works directly from the repository.
 
 It drives the deterministic renderer in `_config/render.mjs` (moved here from the skill-builder knowledge so the pipeline is self-contained) — set `CREW_RENDER` to override its path. The entire HTML look-and-feel lives in `_config/template.htm`; `render.mjs` only maps Markdown → HTML 1:1 and is never restyled. The dashboard has two tabs — **crew** (the plugin's skills/orchestrators/agents) and **Templates** (the skill-builder templates) — and each component opens in `view.html`, a shell that embeds the untouched rendered page in an iframe with a back tab. The Agents grid carries an **orchestrator filter** (All / pro / pulls / run) that shows only the agents a given orchestrator dispatches — the owner is parsed from each agent's `Dispatched by crew:<name>` description.
 
@@ -14,7 +14,9 @@ Anchoring is **content-addressed**: each comment stores the selected text + its 
 
 Run from the repo root (`main/`):
 
-- `pnpm build` — render every skill/agent to `dev/output/` once, plus the index page.
+- `pnpm build` — regenerate the Codex adapter, then render every canonical skill/agent to `dev/output/` plus the index page.
+- `pnpm build:codex` — regenerate `plugins/crew/` from the canonical Claude skills, agents, schema, and scripts.
+- `pnpm check:codex` — verify the generated Codex package is current, its skill frontmatter is Codex-valid, every role has a model/reasoning mapping, and Claude-only runtime primitives did not leak across.
 - `pnpm watch` — rebuild whenever a `SKILL.md` / agent `.md` changes on disk.
 - `pnpm serve` — static server for `dev/output/` with live reload (watches the output dir). `PORT` env overrides the default `4321`.
 - `pnpm dev` — build once, then run the watcher and the server together (the ergonomic loop: edit a skill, see it refresh).

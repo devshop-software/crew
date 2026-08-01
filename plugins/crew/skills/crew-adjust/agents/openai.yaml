@@ -1,0 +1,4 @@
+interface:
+  display_name: "Crew Adjust"
+  short_description: "Run the Crew adjust workflow"
+  default_prompt: "Use $crew-adjust to run the Crew adjust workflow in this repository."

@@ -1,0 +1,68 @@
+{
+  "findings": {
+    "description": "Dispatched by crew:run at ticket finalize, after crew:mr-review clears and the cleanup pass has fixed what it could in place, to harvest the advisory findings still outstanding on the MR and consolidate them into a small set of cohesive, deduped review-followup sweep tickets — each blocked by every contributing source ticket, UI-fidelity sweeps carrying the ui-label so crew:ui-review verifies them — that the loop auto-picks up once their sources merge. Hands back a count of findings filed / fixed inline / deduped / dropped plus a summary MR comment; changes no code.",
+    "model": "gpt-5.6-terra",
+    "model_reasoning_effort": "high",
+    "role_file": "./agents/findings.md"
+  },
+  "gatherer": {
+    "description": "Dispatched by crew:pro first, before the interview, to survey the codebase read-only and map existing-vs-missing for the work an instruction ticket implies, grounding the plan in what the running product actually is. Hands back an advisory current-state map posted on the instruction ticket; it changes no code and creates no tickets.",
+    "model": "gpt-5.6-terra",
+    "model_reasoning_effort": "high",
+    "role_file": "./agents/gatherer.md"
+  },
+  "implementation": {
+    "description": "Dispatched by crew:run to build one GitHub issue end-to-end inside the per-ticket worktree — implementing it, writing unit/integration tests, running the project checks, and on first dispatch opening the draft MR — or, in fix mode, fixing only what a reviewer FAIL or red CI flagged, or, in cleanup mode, fixing the small mechanical advisory review findings in place before they become follow-up tickets. Hands back an MR comment plus a status the loop routes on.",
+    "model": "gpt-5.6-sol",
+    "model_reasoning_effort": "xhigh",
+    "role_file": "./agents/implementation.md"
+  },
+  "interpreter": {
+    "description": "Dispatched by crew:pro twice around the orchestrator's interview: in prepare mode it grounds on the brief + gatherer map and returns the recommended-option question set the orchestrator asks; in write mode it synthesizes the answers into the resolved-intent record on the instruction ticket. It runs no interview itself (the orchestrator owns the asking) and creates no tickets.",
+    "model": "gpt-5.6-sol",
+    "model_reasoning_effort": "xhigh",
+    "role_file": "./agents/interpreter.md"
+  },
+  "merge-judge": {
+    "description": "Dispatched by crew:pulls once per candidate MR to make the independent merge decision and handle the human control surface, reading the diff cold and then cross-checking the crew:reviewer and crew:mr-review verdicts as evidence. Hands back a structured MERGE / FIX / PARK verdict the orchestrator routes on; changes no code and merges nothing.",
+    "model": "gpt-5.6-sol",
+    "model_reasoning_effort": "xhigh",
+    "role_file": "./agents/merge-judge.md"
+  },
+  "mr-review": {
+    "description": "Dispatched by crew:run as the last gate after crew:reviewer passes, to review the MR diff blind for maintainability and craft — duplication, dead code, leaky abstractions, naming, complexity, weak tests. Hands back a PROCEED/BOUNCE gate outcome plus a findings MR comment, where a CRITICAL smell can bounce the MR to implementation once; changes no code.",
+    "model": "gpt-5.6-terra",
+    "model_reasoning_effort": "high",
+    "role_file": "./agents/mr-review.md"
+  },
+  "planner": {
+    "description": "Dispatched by crew:pro last, after the interview, to turn a resolved instruction ticket into a granular board — high-level anti-spec tickets assigned to the resolved milestone, grouped under an epic parent per feature as native sub-issues, with native blocked_by edges and every work ticket in TODO. It creates the tickets itself labeled agent-planned (never agent-ready) and verifies every write, handing back the digest the orchestrator auto-promotes from.",
+    "model": "gpt-5.6-sol",
+    "model_reasoning_effort": "xhigh",
+    "role_file": "./agents/planner.md"
+  },
+  "pull-triage": {
+    "description": "Dispatched by crew:pulls once at run start to survey the whole open ready-for-review MR set as a SET and classify it (quick-win / dependency-driven / giant / blocker / has-human-block / duplicate), grounding in the codebase enough to see the relationships. Hands back a per-run tracking issue holding the advisory plan the orchestrator reads as ordering hints; changes no code and merges nothing.",
+    "model": "gpt-5.6-sol",
+    "model_reasoning_effort": "xhigh",
+    "role_file": "./agents/pull-triage.md"
+  },
+  "qa": {
+    "description": "Dispatched by crew:run after crew:implementation opens the draft MR to verify the implementation against the issue's acceptance criteria — routing each criterion to its venue and weaving the ticket's behavior into the one whole-app e2e/gherkin suite, then committing the test code. Hands back an MR comment with a coverage map and a PASS/FAIL/PARTIAL verdict the orchestrator routes on; owns the e2e tree and fixes no implementation code.",
+    "model": "gpt-5.6-sol",
+    "model_reasoning_effort": "xhigh",
+    "role_file": "./agents/qa.md"
+  },
+  "reviewer": {
+    "description": "Adversarial correctness reviewer dispatched by crew:run after crew:qa to grade one implementation against the issue's acceptance criteria, verifying the diff, the code, and the live app. Hands back a binary PASS/FAIL MR comment of severity-tagged findings the orchestrator routes on (FAIL → crew:implementation fix mode); changes no code.",
+    "model": "gpt-5.6-sol",
+    "model_reasoning_effort": "xhigh",
+    "role_file": "./agents/reviewer.md"
+  },
+  "ui-review": {
+    "description": "Visual-fidelity reviewer dispatched by crew:run after crew:mr-review clears, on UI-labelled tickets only, to verify the built interface against the source-of-truth design it pulls from the design MCP by measuring the whole rendered route — computed typography and the font-load fact — with a committed fidelity tool rather than eyeballing screenshots. Hands back a PASS / FAIL / BLOCKED MR comment the orchestrator routes on (FAIL → crew:implementation fix mode; BLOCKED → escalate when the design source is absent); changes no code.",
+    "model": "gpt-5.6-terra",
+    "model_reasoning_effort": "high",
+    "role_file": "./agents/ui-review.md"
+  }
+}

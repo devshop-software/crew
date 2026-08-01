@@ -1,0 +1,35 @@
+{
+  "name": "crew",
+  "version": "8.6.0",
+  "description": "Autonomous GitHub-issue-driven development for Codex: onboard a repository, plan instruction tickets, build and review issues through specialized subagents, and merge ready pull requests.",
+  "author": {
+    "name": "devshop-software"
+  },
+  "repository": "https://github.com/devshop-software/crew",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "github",
+    "workflow",
+    "planning",
+    "code-review"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Crew",
+    "shortDescription": "Plan, build, review, and merge GitHub work",
+    "longDescription": "Autonomous GitHub-issue-driven development for Codex: onboard a repository, plan instruction tickets, build and review issues through specialized subagents, and merge ready pull requests.",
+    "developerName": "devshop-software",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Use $crew-adjust to onboard this repository.",
+      "Use $crew-pro to plan an instruction ticket.",
+      "Use $crew-run to process the agent-ready queue."
+    ]
+  }
+}

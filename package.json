@@ -3,13 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Local dev tooling for the crew plugin — renders the plugin's skills/agents to HTML and serves a browseable index. NOT part of the shipped plugin (the plugin is ./crew).",
+  "description": "Local dev tooling for crew — generates the Codex adapter and renders the canonical skills/agents to HTML. Not part of either shipped plugin.",
   "packageManager": "pnpm@10.33.2",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "build": "node dev/build.mjs",
+    "build": "node dev/build-codex.mjs && node dev/build.mjs",
+    "build:codex": "node dev/build-codex.mjs",
+    "check:codex": "node dev/build-codex.mjs --check && node dev/validate-codex.mjs",
     "watch": "node dev/watch.mjs",
     "serve": "node dev/serve.mjs",
     "dev": "node dev/dev.mjs"

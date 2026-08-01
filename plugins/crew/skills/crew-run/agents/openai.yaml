@@ -1,0 +1,4 @@
+interface:
+  display_name: "Crew Run"
+  short_description: "Run the Crew run workflow"
+  default_prompt: "Use $crew-run to run the Crew run workflow in this repository."

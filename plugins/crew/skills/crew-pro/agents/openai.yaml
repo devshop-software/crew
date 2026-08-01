@@ -1,0 +1,4 @@
+interface:
+  display_name: "Crew Pro"
+  short_description: "Run the Crew pro workflow"
+  default_prompt: "Use $crew-pro to run the Crew pro workflow in this repository."

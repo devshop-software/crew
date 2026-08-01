@@ -1,26 +1,58 @@
 # crew
 
-Autonomous, GitHub-issue-driven dev workflow for Claude Code, shipped as a plugin.
+Autonomous, GitHub-issue-driven development for Claude Code and Codex.
 
-Three stages, one GitHub board: **plan → build → merge.** **`/crew:pro`** turns a rough instruction ticket into a granular `agent-planned` board; **`/crew:run`** drives each `agent-ready` issue to a ready-for-review MR — implementation → qa → adversarial review (with a capped fix loop) → independent code-smell review → harvest of leftover advisory findings into backlog tickets — in its own git worktree, with the app stack running in isolation; **`/crew:pulls`** merges them. **GitHub is the source of truth:** every agent commits and comments on the issue/MR.
+Three stages, one GitHub board: **plan → build → merge.** Crew turns a rough instruction ticket into a granular `agent-planned` board, drives each `agent-ready` issue to a ready-for-review MR through specialized implementation and review agents, and merges the resulting queue. GitHub is the source of truth: every agent commits and records its handoff on the issue or MR.
 
-## Skills
+## Workflows
 
-- **`/crew:adjust`** — onboard a project: detect & validate the test / lint / build / e2e and app-start commands, the GitHub remote + optional Projects board, and write a `.crew.rc` config file at the repo root (with a MUST-READ pointer in `CLAUDE.md`) that the loop reads at runtime, plus a `.mcp.json` provisioning the crew MCP servers (Playwright + design).
-- **`/crew:pro`** — the attended planner: point it at one rough, milestone-sized `instructions` ticket and it dispatches `gatherer` (read-only codebase survey) → `interpreter` (interviews you, every question leading with a code-grounded recommended option) → `planner` (files granular high-level tickets grouped under an `epic` per feature as native sub-issues, assigned to the resolved milestone, with native `blocked_by` edges). It then auto-promotes the work tickets to `agent-ready` in TODO and closes the instruction ticket — the interview is the sole human touchpoint (if you're away, it pauses rather than proceed on defaults).
-- **`/crew:run`** — the orchestrator loop: pull the next `agent-ready` issue, triage it, and drive it through the bundled subagents (`implementation`, `qa`, `reviewer`, `mr-review`, `ui-review` on UI tickets, a cleanup pass, `findings`) to a ready-for-review MR, then move on to the next. The cleanup pass fixes the small mechanical advisory findings in place — in the same MR, re-gated — so they never become tickets; `findings` consolidates what's left into cohesive `review-followup` sweep tickets, each blocked by its source tickets so the loop picks it up once they merge.
-- **`/crew:pulls`** — the autonomous merge half: runs alongside `/crew:run` and drains the ready-for-review MR queue, merging by default with a human comment as the only brake (a block or question parks the MR; resolving the thread or removing the hold label releases it). Driven by the `pull-triage` and `merge-judge` agents.
+| Workflow | Claude Code | Codex | Purpose |
+|----------|-------------|-------|---------|
+| Adjust | `/crew:adjust` | `$crew-adjust` | Onboard a project, validate its commands and GitHub wiring, configure the crew bot, write `.crew.rc`, and provision shared guidance and MCP configuration. |
+| Pro | `/crew:pro` | `$crew-pro` | Turn one rough `instructions` ticket into grounded, milestone-assigned work grouped under epics, then auto-promote it to `agent-ready`. |
+| Run | `/crew:run` | `$crew-run` | Drive the `agent-ready` queue through implementation, QA, correctness review, craft review, optional UI fidelity review, cleanup, and findings. |
+| Pulls | `/crew:pulls` | `$crew-pulls` | Drain ready-for-review MRs, merging by default while treating unresolved human comments as the brake. |
 
-## Install
+`adjust` keeps `CLAUDE.md` canonical and creates `AGENTS.md` as its relative symlink, so both hosts read the same repository guidance. It refuses to overwrite a user-authored `AGENTS.md`.
+
+## Install for Claude Code
 
 Run inside Claude Code:
 
-```sh
+```text
 /plugin marketplace add devshop-software/crew
 /plugin install crew@devshop
 ```
 
-Then onboard your project with `/crew:adjust`. Either open `agent-ready` GitHub issues directly, or file a rough `instructions` ticket and run `/crew:pro` to plan it into a board. Start the build loop with `/crew:run` — with `/crew:pulls` running alongside to merge.
+Then run `/crew:adjust`.
+
+## Install for Codex
+
+Add this repository as a Codex marketplace:
+
+```sh
+codex plugin marketplace add devshop-software/crew
+```
+
+Open the Plugins directory in the Codex app, select the repository marketplace, and install **Crew**. Then invoke `$crew-adjust` in the target repository. Codex skills accept additional invocation text directly, for example `$crew-run --issue 123`; they do not use Claude's `$ARGUMENTS` placeholder.
+
+## Dual-host source layout
+
+- `crew/` is the canonical Claude Code plugin: four skills, eleven agent definitions, the schema, and runtime scripts.
+- `plugins/crew/` is the generated Codex plugin: Codex-valid skills, generated role references, an explicit model/reasoning manifest, the same schema/scripts, and bundled MCP configuration.
+- `dev/build-codex.mjs` generates the Codex package deterministically from `crew/`; edit the canonical Claude files, then run `pnpm build`.
+- `.claude-plugin/marketplace.json` exposes the Claude package; `.agents/plugins/marketplace.json` exposes the Codex package.
+
+The Codex orchestrators resolve each logical agent through `plugins/crew/agents/manifest.json`, pass its `model` and `model_reasoning_effort` explicitly when spawning it, and require the subagent to read the generated role file before acting. Claude Code continues to get `model` and `effort` from each agent's Markdown frontmatter.
+
+## Development
+
+```sh
+pnpm build         # regenerate Codex adapters and render the dashboard
+pnpm check:codex   # prove generated adapters are current and structurally valid
+```
+
+The checked-in Codex package is generated output so marketplace installs work directly from the repository. Do not edit it by hand.
 
 ## License
 
