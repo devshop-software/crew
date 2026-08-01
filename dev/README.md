@@ -16,7 +16,7 @@ Run from the repo root (`main/`):
 
 - `pnpm build` — regenerate the Codex adapter, then render every canonical skill/agent to `dev/output/` plus the index page.
 - `pnpm build:codex` — regenerate `plugins/crew/` from the canonical Claude skills, agents, schema, and scripts.
-- `pnpm check:codex` — verify the generated Codex package is current, its skill frontmatter is Codex-valid, every role has a model/reasoning mapping, and Claude-only runtime primitives did not leak across.
+- `pnpm check:codex` — verify the generated Codex package is current, its skill frontmatter is Codex-valid, every role has a model/reasoning mapping, the Playwright-only MCP bundle is correct, the design-handoff runtime is present, and Claude-only runtime primitives did not leak across.
 - `pnpm watch` — rebuild whenever a `SKILL.md` / agent `.md` changes on disk.
 - `pnpm serve` — static server for `dev/output/` with live reload (watches the output dir). `PORT` env overrides the default `4321`.
 - `pnpm dev` — build once, then run the watcher and the server together (the ergonomic loop: edit a skill, see it refresh).

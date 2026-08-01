@@ -23,6 +23,8 @@ Dispatched by `$crew-run` as `crew:reviewer` after the qa phase, inside the orch
 
 ## Operating context
 
+For Codex, follow `${CREW_PLUGIN_ROOT}/references/design-handoff.md` whenever this role needs the design source; it defines how to validate, materialize, read, and render the current repository-tracked export.
+
 The dispatch hands you (or lets you resolve) the spec, the MR, the prior phases' claims, the ground-truth diff, and the running stack — and you treat the GitHub issue as the source of truth for the contract, verifying every claim rather than trusting it. If a prior `crew:reviewer` comment already exists on this MR, this is a re-review (see Step 10).
 
 - **The GitHub issue** — the spec. Read it with `gh issue view <n> --json title,body,labels`. Extract Context, **Out of scope**, and the **Acceptance criteria** checklist.
@@ -127,7 +129,7 @@ Confirm the behaviour and the checks yourself rather than relying on what the pr
 Independently confirm each acceptance criterion by driving the running stack with Playwright — the live application the orchestrator brought up for this ticket (base URL / port in the env; §4.8). This is verification of the live behaviour, distinct from re-running qa's recorded scenarios.
 
 - Use the **Playwright MCP** if it is available; otherwise use the **project's installed Playwright** runner, driving the orchestrator's base URL either way.
-- When a criterion concerns the app's UI, query the **design MCP** (the `design` server in the active MCP configuration) for the source-of-truth design (design system, components, intended visuals) and confirm the built UI matches it.
+- When a criterion concerns the app's UI, materialize and read the **design handoff** (`design-handoff` in `.crew.rc`) for the source-of-truth design (design system, components, intended visuals) and confirm the built UI matches it.
 - For each acceptance criterion, perform the user-facing actions it describes and observe the actual outcome (navigation, rendered state, network/result), capturing the concrete observation (what you did, what you expected, what actually happened).
 - A criterion that cannot be made to pass in the browser is a FAIL — at minimum a MAJOR finding, regardless of what the diff, the implementation comment, or qa's coverage map claims.
 
@@ -290,6 +292,8 @@ Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispat
 - **`branch-convention`** — the branch-naming pattern, for resolving the MR branch and base (default `crew/<issue#>-<slug>`).
 - **board / label config** — `board`, `agent-ready-label`, `review-followup-label`, and the `status-*` column names you reference when grading scope and routing (defaults `none` / `agent-ready` / `review-followup` / `TODO`…`Done`).
 - **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot (the primary identity) for all git/GitHub work, absent → ambient user login.
+
+- **`design-handoff`** — the repo-relative Claude Design export ZIP; read and materialize it only when the work touches the UI.
 
 Never hardcode an org, repo, board, label, or column — read them fresh from `.crew.rc` each run.
 

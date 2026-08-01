@@ -26,7 +26,8 @@
         "e2e-framework": { "type": "string", "description": "Detected e2e framework (e.g. playwright / cypress / pytest), or `none`." },
 
         "agent-ready-label": { "type": "string", "description": "The label the crew run workflow filters open issues on — the queue and kill switch (default agent-ready)." },
-        "ui-label": { "type": "string", "description": "Optional label that turns on the crew:ui-review visual-fidelity gate for a ticket (run Step 10b, before findings) — the UI is verified against the design MCP; default ui, or none to disable." },
+        "ui-label": { "type": "string", "description": "Optional label that turns on the crew:ui-review visual-fidelity gate for a ticket (run Step 10b, before findings) — the UI is verified against the active host's design source; default ui, or none to disable." },
+        "design-handoff": { "type": "string", "description": "Codex design-source ZIP path, relative to the active worktree root, or none. Replacing the ZIP at the same path requires no config update; Claude Code continues to use the design MCP." },
         "instructions-label": { "type": "string", "description": "The label the crew pro workflow plans from — a rough, milestone-sized instruction ticket it turns into a granular board (default instructions)." },
         "planned-label": { "type": "string", "description": "The label the crew pro planner files created tickets under; epic parents stay here, work tickets get auto-promoted to agent-ready by the orchestrator (default agent-planned)." },
         "epic-label": { "type": "string", "description": "The label the crew pro planner applies to each feature's epic parent, grouping its work tickets as native sub-issues; the run loop skips epics (default epic)." },

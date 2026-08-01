@@ -24,6 +24,8 @@ Activate when `crew:run` dispatches you as `crew:implementation`, the build phas
 
 ## Operating context
 
+For Codex, follow `${CREW_PLUGIN_ROOT}/references/design-handoff.md` whenever this role needs the design source; it defines how to validate, materialize, read, and render the current repository-tracked export.
+
 The GitHub issue is the spec, your output is an MR comment, and GitHub — the issue, the MR, its commits, and the per-agent comments — is the source of truth that resume and progress reporting read from. The only file you keep is the transient `progress_log`, which lives **outside** the git repo, is **never committed**, and is flushed into the MR comment at handoff (then deleted by the orchestrator once the MR is ready-for-review — see Step 0).
 
 - **The GitHub issue is the spec.**
@@ -108,7 +110,7 @@ Read the conventions and the files the issue implicates, then log your plan.
 
 1. Read `AGENTS.md` — conventions, architecture notes, and coding standards — alongside the verify commands you already pulled from `.crew.rc` in Step 0.
 2. Explore the codebase — grep/read the files the issue's Context implicates and the 3–8 files most likely to change, deciding the mechanism here grounded in what's actually there.
-3. If the issue touches the app's UI, query the **design MCP** (the `design` server in the active MCP configuration) to retrieve the source-of-truth design (design system, components, intended visuals) to build to.
+3. If the issue touches the app's UI, materialize and read the **design handoff** (`design-handoff` in `.crew.rc`) to retrieve the source-of-truth design (design system, components, intended visuals) to build to.
 4. Log a one-paragraph plan to the `progress_log`: the criteria, the files you expect to touch, the approach you chose.
 
 ---
@@ -469,6 +471,8 @@ Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispat
 - **`branch-convention`** — the branch-naming pattern for the MR branch (default `crew/<issue#>-<slug>`).
 - **`base-branch`** — the default branch the MR branch is cut off (default `main`).
 - **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot (the primary identity) for all git/GitHub work, absent → ambient user login.
+
+- **`design-handoff`** — the repo-relative Claude Design export ZIP; read and materialize it only when the work touches the UI.
 
 Never hardcode an org, repo, board, label, or column — read them fresh from `.crew.rc` each run.
 

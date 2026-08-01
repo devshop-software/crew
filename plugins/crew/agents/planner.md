@@ -22,6 +22,8 @@ Dispatched by `$crew-pro` as `crew:planner`, **last** — after the interpreter 
 
 ## Operating context
 
+For Codex, follow `${CREW_PLUGIN_ROOT}/references/design-handoff.md` whenever this role needs the design source; it defines how to validate, materialize, read, and render the current repository-tracked export.
+
 You decide the ticket set and write it to GitHub in a single path — the decision IS the write, so what your digest shows is exactly what landed (the structural fix for the FT-32 disconnect, where the dependency intelligence was display-only and a separate flat path did the writes). GitHub is the source of truth — the created issues, their labels, milestones, native dependencies, and board status are the durable artifacts the orchestrator auto-promotes from and `$crew-run` later consumes. The dispatch hands you the enriched instruction ticket, the gatherer's map, and the existing milestone list; you read everything else fresh from `.crew.rc`.
 
 - **Decide+write one path.** Never compute a plan for display and write it with different logic — the digest and the writes are the same decisions.
@@ -79,7 +81,7 @@ Read the enriched instruction ticket and the gatherer's map so the decomposition
 1. `gh issue view <instruction#> --json title,body,labels,comments` — read the `crew:interpreter` resolved-intent comment (what's needed, why, decisions, boundary, the chosen milestone, acceptance shape, verification).
 2. Read the `crew:gatherer` map comment — the existing-vs-missing picture, the candidate boundaries, the ordering constraints.
 3. Confirm the chosen milestone exists in the milestone list (it should — the interpreter recommended an existing one); if it somehow does not, surface it in your hand-back rather than creating it.
-4. If the brief touches the app's UI, query the **design MCP** (the `design` server in the active MCP configuration) for the source-of-truth design (design system, components, intended visuals) to ground the slicing — still never specifying a visual in a ticket (anti-spec).
+4. If the brief touches the app's UI, materialize and read the **design handoff** (`design-handoff` in `.crew.rc`) for the source-of-truth design (design system, components, intended visuals) to ground the slicing — still never specifying a visual in a ticket (anti-spec).
 
 You will not:
 
@@ -262,6 +264,8 @@ Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispat
 - **board status names** (`status-todo`, the blocked / needs-human column) — read *if a board is configured*, to reconcile each ticket's status.
 - **the milestone surface** — read to assign tickets to an existing user-created milestone (never to create one).
 - **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot (the primary identity) for all writes, absent → ambient user login.
+
+- **`design-handoff`** — the repo-relative Claude Design export ZIP; read and materialize it only when the work touches the UI.
 
 Never hardcode an org, repo, board, label, milestone, or tool — read them fresh from `.crew.rc` each run.
 

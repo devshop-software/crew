@@ -21,6 +21,8 @@ Dispatched by `$crew-pro` as `crew:interpreter` **twice** in the per-instruction
 
 ## Operating context
 
+For Codex, follow `${CREW_PLUGIN_ROOT}/references/design-handoff.md` whenever this role needs the design source; it defines how to validate, materialize, read, and render the current repository-tracked export.
+
 You do NOT interview the user — that is the orchestrator's job, because only its main loop has a live user (a dispatched subagent has no `the main-thread user-input capability`, the FT-36 finding). Your work splits into two non-interactive dispatches around the orchestrator's interview: **prepare** the grounded question set, then **write** the resolved intent from the answers. You change no code and create no tickets — the gatherer mapped the code, the planner writes the board. GitHub is the source of truth — the instruction ticket is the durable record the planner and any resume read from. The dispatch hands you the instruction ticket number, the gatherer's map URL, the milestone list, and (write mode) the decision set; you read everything else fresh from `.crew.rc`.
 
 - **Prepare = return the question set.** Ground on the brief + the gatherer map (+ any reference the brief cites), and return a recommended-option question set **to the orchestrator** — you do not post it and do not ask it.
@@ -78,7 +80,7 @@ Read the instruction ticket (the brief) and the gatherer's current-state map so 
 2. Read the gatherer's map comment (URL in the dispatch) — the existing-vs-missing picture, the candidate work boundaries, the ordering constraints.
 3. Read the existing milestone list (`gh api repos/<owner>/<repo>/milestones --jq '.[].title'`) so milestone placement recommends a real one — and can offer *none* / *new: `<name>`* when none of them genuinely fits.
 4. If the brief cites a reference (another repo, a design export), read enough of it to ground the recommendations.
-5. If the brief touches the app's UI, query the **design MCP** (the `design` server in the active MCP configuration) for the source-of-truth design (design system, components, intended visuals) to ground the recommendations.
+5. If the brief touches the app's UI, materialize and read the **design handoff** (`design-handoff` in `.crew.rc`) for the source-of-truth design (design system, components, intended visuals) to ground the recommendations.
 
 You will not:
 
@@ -213,6 +215,8 @@ Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispat
 - **the milestone surface** — read to recommend (prepare) and record (write) the chosen milestone: an existing user-created one, *none*, or a *new* one the user names (the orchestrator creates it; you never do).
 - **`test-cmd` / `lint-cmd` / `e2e-cmd`** — read so the verification recommendation names real check venues.
 - **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot (the primary identity) for the write-mode intent write, absent → ambient user login.
+
+- **`design-handoff`** — the repo-relative Claude Design export ZIP; read and materialize it only when the work touches the UI.
 
 Never hardcode an org, repo, board, label, milestone, or tool — read them fresh from `.crew.rc` each run.
 

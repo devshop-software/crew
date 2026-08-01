@@ -15,6 +15,11 @@ const plugin = JSON.parse(await readFile(join(CODEX_ROOT, '.codex-plugin', 'plug
 if (plugin.name !== 'crew') fail('plugin name must be crew');
 if (plugin.skills !== './skills/') fail('plugin skills path must be ./skills/');
 if (plugin.mcpServers !== './.mcp.json') fail('plugin MCP path must be ./.mcp.json');
+const mcp = JSON.parse(await readFile(join(CODEX_ROOT, '.mcp.json'), 'utf8'));
+if (!mcp.mcpServers?.playwright) fail('Codex plugin must bundle Playwright MCP');
+if (mcp.mcpServers?.design) fail('Codex plugin must not bundle the unavailable Anthropic Design MCP');
+await readFile(join(CODEX_ROOT, 'references', 'design-handoff.md'), 'utf8');
+await readFile(join(CODEX_ROOT, 'scripts', 'design-handoff.sh'), 'utf8');
 
 const skillRoot = join(CODEX_ROOT, 'skills');
 for (const entry of await readdir(skillRoot, { withFileTypes: true })) {
@@ -43,6 +48,7 @@ for (const [name, agent] of Object.entries(agents)) {
   for (const residue of CLAUDE_RESIDUE) {
     if (role.includes(residue)) fail(`${name}: role file contains Claude-only residue ${residue}`);
   }
+  if (/design MCP|mcp__design__/.test(role)) fail(`${name}: role file contains unavailable Codex design-MCP instructions`);
 }
 
 if (errors.length) {

@@ -18,7 +18,7 @@ You:
 - Set up crew's dedicated GitHub App bot as the required identity for all git/GitHub work — onboarding stops if its org-owned App and key aren't in place.
 - Capture the ticket-source, branch, merge, worktree, and stack-run contract the loop acts on.
 - Write one `.crew.rc` config file at the repo root — the single source every downstream component reads instead of guessing — and leave a MUST-READ pointer to it in canonical `CLAUDE.md`, with `AGENTS.md` as a symlink to that file for Codex.
-- Provision the two crew MCP servers (Playwright + design) in a `.mcp.json` at the repo root, so every dispatched agent has the same browser and design tooling.
+- Keep the root `.mcp.json` provisioning Playwright + design for Claude Code, while Codex uses its bundled Playwright server and the repository-tracked `design-handoff`.
 - Stay project-agnostic by reading the project in front of you, hardcoding no org, repo, board, framework, or package manager.
 - Record an honest `none` for anything genuinely absent and advise the user about the gap.
 - Present the assembled config for confirmation before writing it.
@@ -86,6 +86,19 @@ You will not:
 
 - Assume a tool from the ecosystem — read the actual scripts, configs, and lockfiles.
 
+
+#### Codex design handoff
+
+Detect the repository-tracked Claude Design export during the project scan so Codex can read the intended UI without the unavailable Design MCP.
+
+1. Resolve every tracked ZIP candidate with `git ls-files '*.zip'`, preferring files under `docs/design-references/`, and validate candidates without extracting them with `sh ${CREW_PLUGIN_ROOT}/scripts/design-handoff.sh --check <candidate>`.
+2. When exactly one candidate validates, record its repo-relative path as `design-handoff`; when several validate, ask which one is authoritative; when none validates, record `design-handoff: none` and report that UI work will BLOCK while non-UI work remains available.
+3. Show `design-handoff` in the Step 11 confirmation and write it to `.crew.rc`; on update, revalidate the same path and discover a replacement only when it is missing.
+
+You will not:
+
+- Copy or extract the design handoff into the repository during onboarding — keep the tracked ZIP as the single artifact and materialize it only in temporary storage at runtime.
+
 ---
 
 ### Step 4 — Detect commands
@@ -146,7 +159,7 @@ The loop picks up open issues carrying an agent-ready label; the default is `age
 
 #### The UI-review label
 
-A ticket carrying this optional label gets the `crew:ui-review` visual-fidelity gate — it measures the built UI (computed type + the font-load fact) against the design the design MCP serves, before `crew:findings`; the default is `ui`, and the gate is off for any ticket without it.
+A ticket carrying this optional label gets the `crew:ui-review` visual-fidelity gate — it measures the built UI (computed type + the font-load fact) against the design the handoff defines, before `crew:findings`; the default is `ui`, and the gate is off for any ticket without it.
 
 - Check whether it exists: `gh label list --search ui`; substitute if the project uses another name, or set `ui-label: none` to disable the gate entirely (e.g. a backend/library project with no UI).
 - Record the chosen name as `ui-label` (offer to create it in **Step 13**).
@@ -386,6 +399,7 @@ The file is JSONC (JSON with `//` comments) at the repo root, everything nested 
     "e2e-framework": "playwright",
     "agent-ready-label": "agent-ready",
     "ui-label": "ui",                         // UI-gate: tickets with it get the crew:ui-review visual-fidelity gate (or none)
+    "design-handoff": "docs/design-references/design.zip", // Codex source-of-truth ZIP, repo-relative, or none
     "instructions-label": "instructions",     // $crew-pro input — the rough ticket it plans
     "planned-label": "agent-planned",         // $crew-pro — planner files here; epic parents stay, work tickets auto-promoted to agent-ready by the orchestrator
     "epic-label": "epic",                     // $crew-pro epic parent grouping each feature's work tickets as native sub-issues
@@ -445,7 +459,7 @@ Once confirmed, write `.crew.rc` and its schema sidecar at the repo root, provis
 
 1. Write the confirmed `config` object to `.crew.rc` at the repo root, beside `CLAUDE.md` (the project root in a bare-clone layout), creating it or replacing it wholesale on an update.
 2. Copy the schema sidecar to the same root so the `$schema` pointer resolves for editor linting: `cp "${CREW_PLUGIN_ROOT}/crew.schema.json" .crew.schema.json`.
-3. Write `.mcp.json` at the same root, replacing any existing file wholesale, provisioning the two crew MCP servers — Playwright over stdio and the design server over HTTP — that the crew agents drive (`crew:qa` / `crew:reviewer` / `crew:ui-review`):
+3. Write `.mcp.json` at the same root, replacing any existing file wholesale, provisioning Playwright over stdio and the design server over HTTP for Claude Code; Codex agents use the plugin-bundled Playwright server and `design-handoff`:
 
    ```json
    {
@@ -485,12 +499,13 @@ After writing, surface the gaps that will bite the loop so the user can decide, 
 | No `instructions` label yet | Offer to create it: `gh label create <instructions-label> --color FBCA04 --description "Rough ticket for $crew-pro to plan into a board"` — `$crew-pro` plans tickets carrying it (and without it you can't mark one). |
 | No `agent-planned` / `epic` label yet | `$crew-pro`'s planner self-creates `agent-planned` (and `epic` for each feature group) at runtime, but offer to pre-create them: `gh label create <planned-label> --color C5DEF5 --description "Planned by $crew-pro"`. |
 | No `review-followup` label yet | Offer to create it: `gh label create <review-followup-label> --color 5319E7 --description "Review follow-up from crew — cohesive, MR-blocked backlog sweeps"` — without it `crew:findings` can't tag its follow-ups. |
-| No `ui` label yet | Offer to create it: `gh label create <ui-label> --color 1D76DB --description "UI ticket — gets the crew:ui-review visual-fidelity gate"` — tickets carrying it are verified against the design MCP before findings (skip if `ui-label: none`). |
+| No valid `design-handoff` | UI work cannot be grounded or visually verified in Codex; add a Claude Design export ZIP to the repository and re-run `$crew-adjust update`. Non-UI work remains available. |
+| No `ui` label yet | Offer to create it: `gh label create <ui-label> --color 1D76DB --description "UI ticket — gets the crew:ui-review visual-fidelity gate"` — tickets carrying it are verified against the design handoff before findings (skip if `ui-label: none`). |
 | No board | Fine — the loop runs label-only (oldest agent-ready issue first) and won't move cards; mention a board adds visible TODO → In review tracking and an escalation column. |
 | No e2e framework | Warn that `crew:qa` extends a whole-app e2e suite and has nothing to extend; suggest Playwright or Cypress without installing it. |
 | Playwright MCP needs Node/npx | The `playwright` server in `.mcp.json` starts via `npx @playwright/mcp@latest`; on a machine without Node it won't launch and qa/reviewer fall back to the project's own Playwright runner — install Node or accept the fallback. |
 | Fidelity tool prerequisites | `crew:ui-review`'s measured gate runs `extract-snippet.js` in the Playwright MCP browser and `compare.cjs` with `node` — both already provisioned for a UI project; on a box missing Node or a Chromium the gate degrades to BLOCKED rather than a silent pass. |
-| MCP servers load next session | The Codex plugin bundles the two crew servers; the root `.mcp.json` is the Claude Code adapter and becomes available to Claude Code on its next session. Restart either host after changing MCP configuration. |
+| MCP servers load next session | The Codex plugin bundles Playwright and reads the design handoff configured in `.crew.rc`; the root `.mcp.json` remains the Claude Code adapter and becomes available to Claude Code on its next session. |
 | No `start-cmd` (stack) | Warn that qa (e2e) and reviewer (Playwright) need the app running; suggest wiring a dev-server or `docker compose` target without fabricating one. |
 | No `isolation-scheme` | Note a per-ticket stack can collide with the dev's local stack (and blocks future parallelism); suggest a port env var and a data namespace knob (`COMPOSE_PROJECT_NAME`, a test schema). |
 | Standard worktree layout | Fine — `$crew-run` adds per-ticket worktrees off the existing checkout; mention the bare-clone migration (Step 8) keeps the repo root clean and is available later via `$crew-adjust update`. |
@@ -513,7 +528,7 @@ Summarize the run in a few lines.
 3. **Validated commands** — and any that failed or are missing.
 4. **Worktree** — `bare-clone` (migrated/validated) or `standard`.
 5. **Stack** — `start-cmd`, readiness signal, isolation scheme; validated / failed / `none`.
-6. **MCP** — `.mcp.json` written with the two crew servers (Playwright + design); note if Node/npx is absent.
+6. **Design / MCP** — `design-handoff` validated for Codex; root `.mcp.json` written with Playwright + design for Claude Code; note if unzip or Node/npx is absent.
 7. **Gaps** — the advisories from Step 13.
 8. **Next** — either label an issue `agent-ready` and start `$crew-run`, or label a rough ticket `instructions` and run `$crew-pro` to plan it into a board (it auto-promotes the work tickets to `agent-ready` and closes the instruction ticket).
 
@@ -524,7 +539,7 @@ Summarize the run in a few lines.
 When invoked with `update`, reconcile the existing `.crew.rc` against a fresh scan instead of onboarding from scratch.
 
 1. Read the existing `.crew.rc`.
-2. Re-scan, re-validate the commands and the stack-run config, re-detect the label/board/columns, re-check the worktree layout, and re-write `.mcp.json`.
+2. Re-scan, re-validate the commands and the stack-run config, re-detect the label/board/columns, re-check the worktree layout, revalidate `design-handoff`, and re-write `.mcp.json`.
 3. Present a diff of old → new values before writing.
 4. Write back to `.crew.rc`, replacing only the changed keys and leaving the rest of the `config` object untouched.
 
@@ -532,7 +547,7 @@ When invoked with `update`, reconcile the existing `.crew.rc` against a fresh sc
 
 ## Workflow Configuration
 
-`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `ui-label` / `instructions-label` / `planned-label` / `epic-label` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the required `crew-identity` block — then leaves only a MUST-READ pointer in canonical `CLAUDE.md` and a same-directory `AGENTS.md` symlink to it for Codex (Step 12). It also writes a sibling `.mcp.json` at the same root provisioning the two crew MCP servers (Playwright + design) — an onboarding artifact every agent reads directly, not a `.crew.rc` key (Step 12). On a re-run it drops any deprecated key no longer in the schema — e.g. the removed `ui-fidelity-mode` (the fidelity gate now always gates on a measured MAJOR; there is no advisory mode).
+`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `ui-label` / `design-handoff` / `instructions-label` / `planned-label` / `epic-label` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the required `crew-identity` block — then leaves only a MUST-READ pointer in canonical `CLAUDE.md` and a same-directory `AGENTS.md` symlink to it for Codex (Step 12). It also writes a sibling `.mcp.json` at the same root provisioning Playwright + design for Claude Code; Codex reads `design-handoff` from `.crew.rc` and uses its plugin-bundled Playwright server (Step 12). On a re-run it drops any deprecated key no longer in the schema — e.g. the removed `ui-fidelity-mode` (the fidelity gate now always gates on a measured MAJOR; there is no advisory mode).
 
 `.crew.rc` is the single source every component reads instead of guessing — never hardcode an org, repo, board, label, column, or command into any crew file.
 
@@ -551,7 +566,7 @@ The hard boundaries on every run.
 - Offer the bare-clone worktree migration only with explicit consent; record `worktree-layout` either way, and preserve the old repo on migration.
 - Set up the required crew bot identity: install the token-helper + key per machine and test it (mint a token, confirm repo reach) before recording the block, stopping onboarding if the bot can't be reached.
 - Present the config for confirmation before writing it.
-- Write a `.mcp.json` at the repo root provisioning the two crew MCP servers (Playwright + design) on every onboarding, shown in the Step 11 confirmation before it overwrites any existing file.
+- Validate and record the Codex `design-handoff` path, and write the Claude Code `.mcp.json` at the repo root with Playwright + design on every onboarding; show both before writing.
 - Keep `CLAUDE.md` canonical and create `AGENTS.md` only as its same-directory symlink; stop on a non-shim `AGENTS.md` conflict instead of overwriting it.
 - Record `none` for anything genuinely absent, and advise the user about the gap.
 
@@ -585,4 +600,4 @@ If you catch yourself thinking any of these, stop.
 - _"I'll just write the config and let the user fix it later."_ — STOP. Present it for confirmation first; a config the user never saw is the one nobody trusts.
 - _"They gave me the App values, I'll write the `crew-identity` block."_ — STOP. Test it first — mint a token and confirm it reaches the repo; a block the helper can't use makes every component hard-stop.
 - _"The bot mint failed / this is a personal repo, I'll just run as the user."_ — STOP. The bot is crew's required identity; onboarding waits for a reachable org-owned App and key — there is no run-as-your-own-account fallback.
-- _"This is a backend/library project, it doesn't need a browser or design MCP."_ — STOP. The two crew MCP servers go into every project's `.mcp.json`; flag a missing Node/npx as a gap (Step 13) rather than skipping the file.
+- _"Codex cannot log into the design MCP, so I will skip the design source."_ — STOP. Validate a tracked `design-handoff` for Codex; keep the root `.mcp.json` intact for Claude Code, and report a missing handoff as a UI-only blocker.
