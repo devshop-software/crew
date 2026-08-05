@@ -70,7 +70,7 @@ You will not:
 
 ## The Per-MR Loop (greedy; re-derived EVERY iteration; ZERO on-disk state)
 
-Steps 2–10 are **one MR**; after Step 10 it loops back to Step 2, and it ends only when Step 2 finds no eligible MR (all merged / parked / peer-owned). Every iteration re-derives the candidate and its live state from GitHub and re-confirms the instant before merging (a two-tier listing: the heavy survey was Phase 1, this is the cheap live re-confirm), and any bounce-back for fixes is bounded by a **shared 3-round cap (§4.9)** across all conflict + CI fix triggers, with orchestrator-owned `F`/`R` counters passed into each dispatch and an at-cap exit of comment + park + continue (one stuck MR never halts the sweep).
+Steps 2–10 are **one MR**; after Step 10 it loops back to Step 2, and it ends only when Step 2 finds no eligible MR (all merged / parked / peer-owned). Every iteration re-derives the candidate and its live state from GitHub and re-confirms the instant before merging (a two-tier listing: the heavy survey was Phase 1, this is the cheap live re-confirm), and any bounce-back for fixes is bounded by a **shared 6-round cap (§4.9)** across all conflict + CI fix triggers, with orchestrator-owned `F`/`R` counters passed into each dispatch and an at-cap exit of comment + park + continue (one stuck MR never halts the sweep).
 
 ### Step 2 — Re-list live & pick the next candidate
 
@@ -155,7 +155,7 @@ If the MR is conflicting / behind base (`mergeable: CONFLICTING` / `mergeStateSt
    - **Auto-resolves cleanly** → commit the merge, push (you do this plumbing yourself).
    - **Real conflicts needing judgment** → **DISPATCH `crew:implementation` in fix mode** (`fix round F`) with the conflicted files and the brief "resolve these merge conflicts against `<base>`, preserving both intents"; it resolves + commits, you push.
 3. **Any Step-6 work produces NEW commits** (a base merge/rebase, or a `crew:implementation` resolution) that **INVALIDATE the prior green CI** → **always re-run CI** (Step 7) before merging. An MR that needed no Step-6 work — already mergeable and up-to-date — goes straight to Step 8, where the instant-before-merge `statusCheckRollup`-green re-confirm is sufficient (no extra poll).
-4. **Bounded by the shared 3-round cap (§4.9), orchestrator-owned `F`/`R` counters:** keep a monotonic fix-round number `F` (incremented on every fix-mode dispatch) and pass it in so the agent labels its comment consistently; **at the cap**, comment the recurring blocker, **PARK** (card → needs-human/parked), and **CONTINUE**.
+4. **Bounded by the shared 6-round cap (§4.9), orchestrator-owned `F`/`R` counters:** keep a monotonic fix-round number `F` (incremented on every fix-mode dispatch) and pass it in so the agent labels its comment consistently; **at the cap**, comment the recurring blocker, **PARK** (card → needs-human/parked), and **CONTINUE**.
 
 You will not:
 
@@ -167,7 +167,7 @@ You will not:
 Poll the **gh checks API** / `statusCheckRollup` until the required checks SETTLE, deciding from the durable API state. Branch on what the checks show.
 
 - **All required green →** proceed to Step 8 (merge).
-- **Red required check →** a **fix trigger**: dispatch `crew:implementation` in fix mode scoped to the failing check (re-run `crew:qa` if it's test-related, bringing up the stack per Phase 11's stack lifecycle), increment `F`, re-confirm CI — **same shared 3-round cap (§4.9)**, and at the cap comment + PARK + continue.
+- **Red required check →** a **fix trigger**: dispatch `crew:implementation` in fix mode scoped to the failing check (re-run `crew:qa` if it's test-related, bringing up the stack per Phase 11's stack lifecycle), increment `F`, re-confirm CI — **same shared 6-round cap (§4.9)**, and at the cap comment + PARK + continue.
 - **Slow / queued normally →** **keep waiting**; re-poll. Slowness is not a failure and not an outage.
 - **Detected Actions outage** (throttled / billing / no-runner — an explicit quota error or runs stuck with no runner past a conservative bound, **not** mere slowness, **never** a red check) → **skip this MR and revisit** later in the sweep. Serial is the safe floor.
 
@@ -291,7 +291,7 @@ Do **not** inline the agents' instructions; the agent files own their behavior.
 
 - Is the MR already **merged**? Did `Closes #N` **close** the issue? Was the **card moved**? Is the **branch deleted**? Was the **resolution commit pushed**? Read these from GitHub, never from disk.
 - **Gate adoption on the §4.13 claim** — adopt only your own crashed claim or a provably-dead owner's; skip a live peer's.
-- **Count prior fix rounds from the MR's `crew:implementation` comments** toward the shared 3-round cap (§4.9) — don't reset the counter on resume.
+- **Count prior fix rounds from the MR's `crew:implementation` comments** toward the shared 6-round cap (§4.9) — don't reset the counter on resume.
 - **Every step is idempotent + verify-landed** (§4.11), so a crash mid-sequence resumes without double-merging — re-reading shows the merge already landed and you advance.
 
 There is no separate resume machinery beyond this reconstruction; the loop simply re-derives and continues.
@@ -343,7 +343,7 @@ The hard boundaries on every run.
 - **Re-derive every iteration from GitHub** (§4.11) — keep ZERO on-disk state; the heavy survey is Phase 1, Step 2 is the cheap live re-confirm; use triage hints as ORDERING INPUT ONLY, never a frozen sequence.
 - **Stay thin** — do the git/`gh` plumbing yourself; **dispatch `crew:implementation`** for conflict resolution (preserving both intents against a **freshly-fetched** base §4.15) and CI fixes; never hand-edit a conflict.
 - **Always re-run CI after a judgment-bearing resolution** — new code invalidates the prior green; never merge a resolved MR on stale-green CI. Decide CI from the **checks API**, never a notification (§4.18).
-- **Respect the shared 3-round cap (§4.9)** — orchestrator-owned `F`/`R` counters across conflict + CI rounds; at the cap, comment + park + continue.
+- **Respect the shared 6-round cap (§4.9)** — orchestrator-owned `F`/`R` counters across conflict + CI rounds; at the cap, comment + park + continue.
 - **Merge with the configured `merge-method`** + `--delete-branch`; confirm `state == MERGED` by re-reading (§4.11), confirm `Closes #N` actually closed the issue (FT-8), move the card → `status-done`, and post **ONE consolidated decision comment** (not scattered per-action ones).
 - **Claim by identity (§4.13)** before mutating; skip any MR/branch a live peer (`/crew:run` or another `/pulls`) owns; on resume adopt only your own crashed claim or a provably-dead owner's; count prior fix rounds from MR comments.
 - **Heal main in-loop (Phase 11)** on an isolated stack (run-derived ports, `fuser -k` teardown, never kill a peer's server §4.8); a broken main is fixed in a SEPARATE MR merged by the same default-unless-vetoed rule; re-confirm main green before declaring healed; **never heal-on-optimism under an outage.**
@@ -384,7 +384,7 @@ If you catch yourself thinking any of these, stop.
 - _"I'll just merge over this missing required check, it's probably an outage."_ — STOP. A detected outage means **skip & revisit**, never merge over a missing check. Serial is the safe floor; a red check is a fix trigger.
 - _"The triage issue ordered them 1-2-3, I'll merge in that exact order."_ — STOP. Triage is **advisory ordering input**, re-derived live every iteration — never a frozen sequence. The set may have changed.
 - _"main might be fine after all those merges, I'll skip the gate."_ — STOP. **Heal main in-loop (Phase 11)** — run the full gate on a fresh fetch; a broken main is fixed in a separate MR and re-confirmed green. Never heal-on-optimism.
-- _"This is the 4th fix round, one more should do it."_ — STOP. The shared cap is **3 (§4.9)** across conflict + CI rounds. Comment the blocker, park, continue.
+- _"This is the 7th fix round, one more should do it."_ — STOP. The shared cap is **6 (§4.9)** across conflict + CI rounds. Comment the blocker, park, continue.
 - _"I'll post an audit comment for each step so there's a trail."_ — STOP. Post **ONE consolidated decision comment** (Step 9) — scattered per-action comments are the noise this skill exists to reduce.
 - _"I exported `GH_TOKEN` a step ago, this `gh` call will use it."_ — STOP. A separate Bash call is a fresh shell; pass the token inline on the write (`GH_TOKEN="$(<token-helper>)" gh …`) or it silently posts as your account (#536, §4.17).
 - _"The token helper failed / there's no `GH_TOKEN`, I'll just use the normal `gh` login."_ — STOP. If `crew-identity` is configured, a failed mint is a **hard-stop (§4.17)**, not a fallback to the human. Only an *absent* block runs as the user.
