@@ -59,6 +59,21 @@ async () => {
     return t;
   }
 
+  function scopePath(el) {
+    // The nearest stable identifiers on the element and its ancestors — what compare.cjs
+    // --scope matches a delta against, so the ticket's slice is decided by the DOM, not by
+    // an opinion. Ids only (never classes): Tailwind-style class strings are noise.
+    var out = [], node = el, hops = 0;
+    while (node && node.nodeType === 1 && hops < 8 && out.length < 4) {
+      var id = node.getAttribute && (node.getAttribute('data-testid') || node.getAttribute('data-test-id') ||
+        node.getAttribute('data-test') || node.getAttribute('data-component') || node.id);
+      if (id) out.push(String(id));
+      node = node.parentElement;
+      hops++;
+    }
+    return out;
+  }
+
   function isVisible(el, cs) {
     if (cs.display === 'none' || cs.visibility === 'hidden') return false;
     if (parseFloat(cs.opacity) === 0) return false;
@@ -88,6 +103,7 @@ async () => {
       text: text.length > 160 ? text.slice(0, 160) : text,
       key: normKey(text),
       role: implicitRole(el),
+      path: scopePath(el),
       tag: tag,
       level: /^h[1-6]$/.test(tag) ? parseInt(tag[1], 10) : null,
       rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) },

@@ -12,10 +12,31 @@
 // gate misses.
 //
 //   node compare.cjs --build build.json [--design-extract design.json]
-//                    [--design-css tokens.css]
+//                    [--design-css tokens.css] [--scope <regex> ...]
 //   node compare.cjs --selftest
 //
-// A measured MAJOR always gates: `status` is FAIL. There is no advisory mode.
+// What gates: the whole route is always measured and every delta is always
+// reported, but only a delta the ticket can actually fix sets `status: FAIL`.
+//
+//   font-load MAJOR  — always gates. A design-declared face that never loads or
+//                      is never used is a route-level truth, independent of the
+//                      seeded data and of which slice the ticket owns.
+//   typography MAJOR — gates only when the element is in the ticket's scope
+//                      (`--scope`). Out-of-scope type deltas are real and stay in
+//                      the report as advisory, for crew:findings to file.
+//   completeness     — never gates (MINOR both directions). Elements align on
+//                      their text, so a design render populated with fixture
+//                      content cannot be distinguished from a build seeded with
+//                      different content: "missing element" measures data parity,
+//                      not design fidelity. Reported, never gating.
+//
+// --scope takes one or more case-insensitive regexes matched against each
+// element's text, its `path` (the data-testid/id chain the extractor captures),
+// its tag and its role. Derive them from the diff — the components the ticket
+// changed — never from which deltas you would rather not see. With no --scope the
+// tool falls back to whole-route gating (every MAJOR gates), the conservative
+// default.
+//
 // Exit code: 0 on PASS, 1 on FAIL, 2 on a usage/IO error. The JSON `status` is
 // the source of truth; the agent maps it to the MR-comment verdict and owns the
 // separate BLOCKED case (design source unreachable).
@@ -43,6 +64,29 @@ function iou(a, b) {
   const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
   const uni = a.w * a.h + b.w * b.h - inter;
   return uni > 0 ? inter / uni : 0;
+}
+
+// Build the in-scope predicate from the --scope regexes. Null (no patterns) means
+// whole-route mode: nothing is out of scope, so every MAJOR gates as it always did.
+function scopeMatcher(patterns) {
+  if (!patterns || !patterns.length) return null;
+  const res = patterns.map(p => {
+    try { return new RegExp(p, 'i'); }
+    catch (e) { return new RegExp(String(p).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); }
+  });
+  return function (el) {
+    if (!el) return false;
+    // Each field is tested on its own, so an anchored pattern (^Actor name$) means what it says.
+    const fields = [el.text || '', el.key || '', el.tag || '', el.role || ''].concat(el.path || []);
+    return res.some(r => fields.some(f => f && r.test(f)));
+  };
+}
+
+// 'in-ticket' / 'out-of-scope' when scoped, 'unscoped' when no --scope was given.
+// Only 'out-of-scope' ever withholds the gate.
+function scopeOf(inScope, el) {
+  if (!inScope) return 'unscoped';
+  return inScope(el) ? 'in-ticket' : 'out-of-scope';
 }
 
 // Parse design token CSS text into a { --name: value } map and derive font intent.
@@ -89,7 +133,7 @@ function fontAssertions(build, design, designUsed) {
     const expected = fam === display || (designUsed && designUsed.has(fam));
     if (expected && bundledFams[fam] && !loadedFams[fam]) {
       deltas.push({
-        severity: 'MAJOR', dimension: 'font-load',
+        severity: 'MAJOR', dimension: 'font-load', scope: 'route',
         title: `Design face "${family}" never loads`,
         detail: `Design token ${token} declares "${family}" (expected on this route), it is bundled in the build (document.fonts), but no face reports status=loaded — ${erroredFams[fam] ? 'a face was requested but failed to load (check the @font-face src / network).' : 'the page never requests it.'}`
       });
@@ -97,7 +141,7 @@ function fontAssertions(build, design, designUsed) {
   });
   if (display && !usedFams[display]) {
     deltas.push({
-      severity: 'MAJOR', dimension: 'font-load',
+      severity: 'MAJOR', dimension: 'font-load', scope: 'route',
       title: `Display face "${design.display}" is declared but unused`,
       detail: `--font-display is "${design.display}", but no built text element computes it (built type falls back to another family).`
     });
@@ -106,8 +150,9 @@ function fontAssertions(build, design, designUsed) {
 }
 
 // ---------- per-element type comparison (needs a design extract) ----------
-function alignAndDiff(build, design) {
+function alignAndDiff(build, design, inScope) {
   const deltas = [];
+  const missing = [];
   const buildByKey = {};
   (build.elements || []).forEach((e, i) => { (buildByKey[e.key] = buildByKey[e.key] || []).push({ e, i, taken: false }); });
 
@@ -129,19 +174,23 @@ function alignAndDiff(build, design) {
     if (!d.key) return;
     const b = claim(d);
     if (!b) {
-      deltas.push({
-        severity: 'MAJOR', dimension: 'completeness',
+      // MINOR, never gating: elements align on their text, so a design render carrying
+      // fixture content reads as "missing" against a build seeded with different content.
+      // This measures data parity, not fidelity — report it, never fail on it.
+      missing.push({
+        severity: 'MINOR', dimension: 'completeness', scope: scopeOf(inScope, d),
         title: `Missing element: "${d.text}"`,
-        detail: `The design renders "${d.text}" (${d.role}); no matching element was found in the build at the same place.`,
+        detail: `The design renders "${d.text}" (${d.role}); no matching element was found in the build at the same place. Advisory — the design render's seeded content may simply differ from the build's.`,
         surface: d.text
       });
       return;
     }
     const df = d.font, bf = b.font;
     if (!df || !bf) return; // malformed element — skip rather than crash the gate
+    const scope = scopeOf(inScope, b);
     if (ci(df.primary) && ci(bf.primary) && ci(df.primary) !== ci(bf.primary)) {
       deltas.push({
-        severity: 'MAJOR', dimension: 'typography',
+        severity: 'MAJOR', dimension: 'typography', scope,
         title: `Wrong font on "${d.text}"`,
         detail: `design ${df.primary} vs built ${bf.primary}`, surface: d.text
       });
@@ -149,21 +198,32 @@ function alignAndDiff(build, design) {
     if (df.size != null && bf.size != null) {
       const diff = Math.abs(df.size - bf.size);
       if (diff > Math.max(2, df.size * 0.1)) {
-        deltas.push({ severity: 'MAJOR', dimension: 'typography', title: `Wrong font-size on "${d.text}"`, detail: `design ${df.size}px vs built ${bf.size}px`, surface: d.text });
+        deltas.push({ severity: 'MAJOR', dimension: 'typography', scope, title: `Wrong font-size on "${d.text}"`, detail: `design ${df.size}px vs built ${bf.size}px`, surface: d.text });
       } else if (diff >= 1) {
-        deltas.push({ severity: 'MINOR', dimension: 'typography', title: `Near-miss font-size on "${d.text}"`, detail: `design ${df.size}px vs built ${bf.size}px`, surface: d.text });
+        deltas.push({ severity: 'MINOR', dimension: 'typography', scope, title: `Near-miss font-size on "${d.text}"`, detail: `design ${df.size}px vs built ${bf.size}px`, surface: d.text });
       }
     }
     const dw = weightNum(df.weight), bw = weightNum(bf.weight);
     if (Math.abs(dw - bw) >= 100) {
-      deltas.push({ severity: 'MAJOR', dimension: 'typography', title: `Wrong font-weight on "${d.text}"`, detail: `design ${dw} vs built ${bw}`, surface: d.text });
+      deltas.push({ severity: 'MAJOR', dimension: 'typography', scope, title: `Wrong font-weight on "${d.text}"`, detail: `design ${dw} vs built ${bw}`, surface: d.text });
     }
     if (df.lineHeight != null && bf.lineHeight != null && Math.abs(df.lineHeight - bf.lineHeight) > 2) {
-      deltas.push({ severity: 'MINOR', dimension: 'typography', title: `Line-height drift on "${d.text}"`, detail: `design ${df.lineHeight}px vs built ${bf.lineHeight}px`, surface: d.text });
+      deltas.push({ severity: 'MINOR', dimension: 'typography', scope, title: `Line-height drift on "${d.text}"`, detail: `design ${df.lineHeight}px vs built ${bf.lineHeight}px`, surface: d.text });
     }
     if (Math.abs((df.letterSpacing || 0) - (bf.letterSpacing || 0)) > 0.5) {
-      deltas.push({ severity: 'MINOR', dimension: 'typography', title: `Letter-spacing drift on "${d.text}"`, detail: `design ${df.letterSpacing}px vs built ${bf.letterSpacing}px`, surface: d.text });
+      deltas.push({ severity: 'MINOR', dimension: 'typography', scope, title: `Letter-spacing drift on "${d.text}"`, detail: `design ${df.letterSpacing}px vs built ${bf.letterSpacing}px`, surface: d.text });
     }
+  });
+
+  // Missing elements — in-scope first, then capped, so a fixture-vs-seed content gap
+  // (hundreds of rows on a populated design render) can't drown the measured signal.
+  const MISSING_CAP = 5;
+  missing.sort((a, b2) => (a.scope === 'in-ticket' ? 0 : 1) - (b2.scope === 'in-ticket' ? 0 : 1));
+  missing.slice(0, MISSING_CAP).forEach(m => deltas.push(m));
+  if (missing.length > MISSING_CAP) deltas.push({
+    severity: 'MINOR', dimension: 'completeness', scope: 'out-of-scope',
+    title: `${missing.length - MISSING_CAP} more design elements with no build match`,
+    detail: `${missing.length} design-render text elements had no build match; the first ${MISSING_CAP} are listed above. Usually the design fixture's content against a leaner seeded route, not missing UI.`
   });
 
   // Extra elements — build text the design render has no match for (a hand-rolled addition). MINOR,
@@ -172,13 +232,13 @@ function alignAndDiff(build, design) {
   const extras = [];
   Object.keys(buildByKey).forEach(k => { buildByKey[k].forEach(c => { if (!c.taken) extras.push(c.e); }); });
   extras.slice(0, EXTRA_CAP).forEach(e => deltas.push({
-    severity: 'MINOR', dimension: 'completeness',
+    severity: 'MINOR', dimension: 'completeness', scope: scopeOf(inScope, e),
     title: `Extra element: "${e.text}"`,
     detail: `The build renders "${e.text}" (${e.role}); the design render has no matching element.`,
     surface: e.text
   }));
   if (extras.length > EXTRA_CAP) deltas.push({
-    severity: 'MINOR', dimension: 'completeness',
+    severity: 'MINOR', dimension: 'completeness', scope: 'out-of-scope',
     title: `${extras.length - EXTRA_CAP} more extra build elements`,
     detail: `${extras.length} build text elements have no design match; the first ${EXTRA_CAP} are listed above.`
   });
@@ -186,32 +246,41 @@ function alignAndDiff(build, design) {
 }
 
 // ---------- run ----------
-function evaluate({ build, design, designExtract }) {
+function evaluate({ build, design, designExtract, scope }) {
   const designUsed = new Set();
   if (designExtract) {
     (designExtract.usedFamilies || []).forEach(f => designUsed.add(ci(f)));
     (designExtract.elements || []).forEach(e => { if (e.font && e.font.primary) designUsed.add(ci(e.font.primary)); });
   }
+  const inScope = scopeMatcher(scope);
   let deltas = [];
   deltas = deltas.concat(fontAssertions(build, design, designUsed));
-  if (designExtract) deltas = deltas.concat(alignAndDiff(build, designExtract));
+  if (designExtract) deltas = deltas.concat(alignAndDiff(build, designExtract, inScope));
 
   const major = deltas.filter(d => d.severity === 'MAJOR');
   const minor = deltas.filter(d => d.severity === 'MINOR');
-  // A measured MAJOR always gates — there is no advisory mode.
-  const status = major.length > 0 ? 'FAIL' : 'PASS';
+  // A MAJOR gates unless it is measured outside the ticket's scope. font-load is route-level:
+  // it always gates, because a declared face that never loads is nobody's slice and everybody's bug.
+  const gating = major.filter(d => d.dimension === 'font-load' || d.scope !== 'out-of-scope');
+  const advisory = major.filter(d => gating.indexOf(d) === -1);
+  const status = gating.length > 0 ? 'FAIL' : 'PASS';
   return {
     status,
     checks: {
       fontLoad: !!design,
       perElement: !!designExtract,
-      perElementNote: designExtract ? null : 'No design render provided — per-element type comparison skipped (font-load assertion + token check only). Token→element ownership not closed in this mode.'
+      perElementNote: designExtract ? null : 'No design render provided — per-element type comparison skipped (font-load assertion + token check only). Token→element ownership not closed in this mode.',
+      scopeMode: inScope ? 'ticket-scoped' : 'whole-route',
+      scopePatterns: scope || [],
+      scopeNote: inScope
+        ? 'Whole route measured; typography MAJORs outside the scope patterns are advisory. font-load always gates; completeness never gates.'
+        : 'No --scope given — whole-route gating: every MAJOR gates. font-load always gates; completeness never gates.'
     },
-    counts: { major: major.length, minor: minor.length },
-    deltas: major.concat(minor),
+    counts: { major: major.length, gating: gating.length, advisory: advisory.length, minor: minor.length },
+    deltas: gating.concat(advisory, minor),
     summary: status === 'FAIL'
-      ? `${major.length} MAJOR fidelity delta(s) — gate FAIL.`
-      : `No MAJOR fidelity delta. ${minor.length} MINOR note(s).`
+      ? `${gating.length} gating MAJOR fidelity delta(s) — gate FAIL${advisory.length ? `; ${advisory.length} further MAJOR(s) measured out of scope (advisory).` : '.'}`
+      : `No gating MAJOR fidelity delta.${advisory.length ? ` ${advisory.length} out-of-scope MAJOR(s) for crew:findings.` : ''} ${minor.length} MINOR note(s).`
   };
 }
 
@@ -223,6 +292,7 @@ function loadArgs(argv) {
     else if (k === '--build') a.build = argv[++i];
     else if (k === '--design-extract') a.designExtract = argv[++i];
     else if (k === '--design-css') a.designCss = argv[++i];
+    else if (k === '--scope') (a.scope = a.scope || []).push(argv[++i]);
   }
   return a;
 }
@@ -230,14 +300,14 @@ function loadArgs(argv) {
 function main() {
   const a = loadArgs(process.argv);
   if (a.selftest) return selftest();
-  if (!a.build) { process.stderr.write('usage: compare.cjs --build build.json [--design-extract d.json] [--design-css t.css]\n'); process.exit(2); }
+  if (!a.build) { process.stderr.write('usage: compare.cjs --build build.json [--design-extract d.json] [--design-css t.css] [--scope <regex> ...]\n'); process.exit(2); }
   let build, design = null, designExtract = null;
   try {
     build = readJSON(a.build);
     if (a.designCss) design = parseDesignCss(fs.readFileSync(a.designCss, 'utf8'));
     if (a.designExtract) designExtract = readJSON(a.designExtract);
   } catch (e) { process.stderr.write('IO error: ' + e.message + '\n'); process.exit(2); }
-  const out = evaluate({ build, design, designExtract });
+  const out = evaluate({ build, design, designExtract, scope: a.scope });
   process.stdout.write(JSON.stringify(out, null, 2) + '\n');
   process.exit(out.status === 'FAIL' ? 1 : 0);
 }
@@ -349,6 +419,51 @@ function selftest() {
     elements: [{ text: 'Sign in', key: 'sign in', role: 'heading', rect: { x: 0, y: 0, w: 1, h: 1 }, font: { primary: 'Inter', size: 24, weight: 700 } }] };
   const v11 = evaluate({ build: buildErr, design, designExtract: null });
   check('errored face wording mentions failed to load', v11.deltas.some(d => /never loads/i.test(d.title) && /failed to load/i.test(d.detail)));
+
+  // ---- scope partitioning + the completeness demotion (the false-positive class) ----
+  const interOnly = parseDesignCss(":root{--font-display:'Inter'}");
+  const chromeDesign = { elements: [
+    { text: 'Org switcher', key: 'org switcher', role: 'button', rect: { x: 0, y: 0, w: 80, h: 20 }, path: ['app-shell'], font: { primary: 'Inter', size: 14, weight: 400 } },
+    { text: 'Actor name', key: 'actor name', role: 'text', rect: { x: 0, y: 100, w: 80, h: 20 }, path: ['product-history'], font: { primary: 'Inter', size: 12, weight: 400 } }
+  ] };
+  const chromeBuild = { fonts: [{ family: 'Inter', status: 'loaded' }], usedFamilies: ['Inter'], elements: [
+    { text: 'Org switcher', key: 'org switcher', role: 'button', rect: { x: 0, y: 0, w: 80, h: 20 }, path: ['app-shell'], font: { primary: 'Inter', size: 20, weight: 400 } },
+    { text: 'Actor name', key: 'actor name', role: 'text', rect: { x: 0, y: 100, w: 80, h: 20 }, path: ['product-history'], font: { primary: 'Inter', size: 12, weight: 400 } }
+  ] };
+
+  // 12. a MAJOR measured outside the ticket's scope is advisory, not a gate (shared app chrome)
+  const v12 = evaluate({ build: chromeBuild, design: interOnly, designExtract: chromeDesign, scope: ['product-history'] });
+  check('out-of-scope typography MAJOR does not gate', v12.status === 'PASS' && v12.counts.advisory === 1 && v12.counts.gating === 0);
+  check('out-of-scope MAJOR is still reported', v12.deltas.some(d => /Org switcher/.test(d.surface || '') && d.severity === 'MAJOR' && d.scope === 'out-of-scope'));
+
+  // 13. the same delta inside the ticket's scope still gates (a real 11px-vs-12px defect)
+  const v13 = evaluate({ build: chromeBuild, design: interOnly, designExtract: chromeDesign, scope: ['app-shell'] });
+  check('in-scope typography MAJOR gates', v13.status === 'FAIL' && v13.counts.gating === 1);
+
+  // 14. with no --scope the tool falls back to whole-route gating (conservative default)
+  const v14 = evaluate({ build: chromeBuild, design: interOnly, designExtract: chromeDesign });
+  check('unscoped run gates every MAJOR', v14.status === 'FAIL' && v14.checks.scopeMode === 'whole-route');
+
+  // 15. a populated design fixture vs a minimally seeded route is MINOR and PASSes
+  const fixture = { elements: Array.from({ length: 20 }, (_, i) => ({
+    text: 'Fixture row ' + i, key: 'fixture row #', role: 'text', rect: { x: 0, y: i * 10, w: 50, h: 10 }, font: { primary: 'Inter', size: 14, weight: 400 } })) };
+  const v15 = evaluate({
+    build: { fonts: [{ family: 'Inter', status: 'loaded' }], usedFamilies: ['Inter'],
+      elements: [{ text: 'Only row', key: 'only row', role: 'text', rect: { x: 0, y: 0, w: 50, h: 10 }, font: { primary: 'Inter', size: 14, weight: 400 } }] },
+    design: interOnly, designExtract: fixture, scope: ['only row']
+  });
+  check('fixture-vs-seed completeness does not gate', v15.status === 'PASS' && v15.counts.gating === 0);
+  check('missing elements report as MINOR', v15.deltas.some(d => d.dimension === 'completeness' && /Missing element/i.test(d.title) && d.severity === 'MINOR'));
+  check('missing-element output is capped', v15.deltas.filter(d => /Missing element/i.test(d.title)).length <= 5 && v15.deltas.some(d => /more design elements with no build match/i.test(d.title)));
+
+  // 16. font-load still gates under the narrowest possible scope — the spine survives the fix
+  const v16 = evaluate({ build: buildLogin, design, designExtract, scope: ['nothing-matches-this'] });
+  check('font-load MAJOR gates regardless of scope', v16.status === 'FAIL' && v16.deltas.some(d => d.dimension === 'font-load' && d.scope === 'route'));
+  check('wrong-font-on-heading demoted to advisory when out of scope', v16.deltas.some(d => d.dimension === 'typography' && d.severity === 'MAJOR' && d.scope === 'out-of-scope'));
+
+  // 17. scope matches on element text as well as the testid path (projects without testids)
+  const v17 = evaluate({ build: chromeBuild, design: interOnly, designExtract: chromeDesign, scope: ['^Org switcher$'] });
+  check('scope matches element text', v17.status === 'FAIL' && v17.counts.gating === 1);
 
   process.stdout.write(log.join('\n') + '\n' + (pass ? 'ALL PASS' : 'SELFTEST FAILED') + '\n');
   process.exit(pass ? 0 : 1);
