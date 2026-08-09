@@ -198,7 +198,7 @@ Return a tight summary to the orchestrator — this is what `crew:run` routes on
 3. **The 1–3 most important findings**, one line each.
 4. **MR-comment URL.**
 
-On `BOUNCE`, the orchestrator sends the MR to `crew:implementation` (fix mode, scoped to your CRITICALs), then re-runs `crew:qa` and `crew:reviewer`, consuming one of the 3 review rounds. On `PROCEED`, the orchestrator runs the remaining finalize phases — the UI gate on a UI-labelled ticket, the cleanup pass that fixes your mechanical MAJOR/MINOR smells in place (re-dispatching you on the new diff when it touches non-test source), then `crew:findings` — before it deletes the progress_log, flips the MR to ready-for-review, and moves the card to "In review".
+On `BOUNCE`, the orchestrator sends the MR to `crew:implementation` (fix mode, scoped to your CRITICALs), then re-runs `crew:qa` and `crew:reviewer`, consuming one of the 6 review rounds. On `PROCEED`, the orchestrator runs the remaining finalize phases — the UI gate on a UI-labelled ticket, the cleanup pass that fixes your mechanical MAJOR/MINOR smells in place (re-dispatching you on the new diff when it touches non-test source), then `crew:findings` — before it deletes the progress_log, flips the MR to ready-for-review, and moves the card to "In review".
 
 ---
 

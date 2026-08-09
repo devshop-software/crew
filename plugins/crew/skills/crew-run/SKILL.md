@@ -517,7 +517,7 @@ The hard boundaries on every run.
 - Merge, or block the queue waiting for a human to merge — flip to ready-for-review and move on.
 - **Ask the user anything mid-run** — no `the main-thread user-input capability`, no plan-mode pause, no "which path should I take?" menu. No human is watching; a prompt hangs the queue. Resolve every fork yourself from the defaults, or **skip-as-blocked / escalate** with a comment and advance (§ Role).
 - Reference npm, `crew init`, `crew update`, semantic-release, or a marketplace package — Crew ships as separate Claude Code and Codex plugins; the loop remains plugin-only.
-- Loop past 3 review FAILs — escalate and advance.
+- Loop past the shared 6-round fix cap — escalate and advance.
 - Re-run completed phases on resume — read the MR comments and pick up where the work left off.
 - Pick an issue that already has an open `Closes #N` MR as if it were fresh — that's resume work.
 
