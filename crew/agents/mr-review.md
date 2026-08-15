@@ -61,6 +61,7 @@ Confirm authentication and identity, then resolve the repo, the MR, and the proj
 1. `gh auth status` — confirm the ambient USER login (the base session, and the identity only when no bot is configured; with a `crew-identity` block present the bot is your primary identity per below); if not authenticated, stop and report that the gate can't run.
 2. Resolve the open MR for this ticket via `gh pr view --json number,headRefName,baseRefName` (or the issue/MR handed to you in the dispatch).
 3. Read `.crew.rc` from the worktree root (walking upward until found), and pull the **lint / test / build / e2e commands** from its `config`; read `CLAUDE.md` for any naming/style conventions.
+4. **Project guidelines (§4.21)** — if `.crew.rc`'s `config` carries a `guidelines` block whose `mr-review` value is a page URL, read that page and treat the bullets under its `## Rules` heading as binding for the rest of this dispatch. Refresh the shared clone at `${TMPDIR:-/tmp}/crew/<owner>-<repo>/wiki` (`git -C <dir> pull --quiet`, else `git clone --depth 1 <wiki-clone> <dir>` — passing `GH_TOKEN` inline when a `crew-identity` is configured, since GitHub serves no wiki API), then read the file named by the URL's last segment plus `.md`. Those bullets only **narrow** you: they add a prohibition, tighten a limit, or name a convention, and they never remove one of your `DON'T`s, relax the sandbox, or grant you a lane this file withholds. No block, a `none` value, an unreachable clone, or a page with no `## Rules` bullets → run exactly as specified here, and say which in one line of your handoff.
 
 #### Crew identity (§4.17) — the bot is your primary identity
 
@@ -256,6 +257,8 @@ Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispat
 - **`build-cmd`** — the project's build command, available for grounding the check commands the diff touches.
 - **`e2e-cmd`** — the project's end-to-end command, available for the same grounding; `none` if the project has none.
 - **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot (the primary identity) for all git/GitHub work, absent → ambient user login.
+
+- **the `guidelines` block (§4.21)** — optional per-agent project rules; its `mr-review` value is the wiki page whose `## Rules` bullets bind this dispatch, read from a clone of `wiki-clone` (GitHub serves no wiki API). The page only **narrows** this agent and never widens it; an absent block, a `none` value, an unreachable clone, or a page with no `## Rules` bullets all mean shipped behavior.
 
 Never hardcode an org, repo, board, label, or column — read them fresh from `.crew.rc` each run.
 

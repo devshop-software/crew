@@ -70,6 +70,7 @@ When `.crew.rc`'s `config` has a `crew-identity` block, the bot App token is you
 2. Identify the **issue number** and **MR**; the orchestrator passes the issue number, and to recover it the open MR's body carries `Closes #<issue>` (`gh pr view --json number,body,headRefName`). Read the issue body with `gh issue view <issue> --json title,body` — this is your acceptance-criteria contract.
 3. Read `.crew.rc` (walk upward from CWD until found) and parse its `config`, extracting the **e2e command**, **e2e framework**, **test command**, **lint command**, and branch convention.
 4. Open the `progress_log` at the out-of-tree path (create the directory if missing) and append a `## qa — <UTC timestamp>` header; if a prior `## qa` block exists, this is a **re-verify round** — read it for your earlier routing so you re-check the same criteria.
+5. **Project guidelines (§4.21)** — if `.crew.rc`'s `config` carries a `guidelines` block whose `qa` value is a page URL, read that page and treat the bullets under its `## Rules` heading as binding for the rest of this dispatch. Refresh the shared clone at `${TMPDIR:-/tmp}/crew/<owner>-<repo>/wiki` (`git -C <dir> pull --quiet`, else `git clone --depth 1 <wiki-clone> <dir>` — passing `GH_TOKEN` inline when a `crew-identity` is configured, since GitHub serves no wiki API), then read the file named by the URL's last segment plus `.md`. Those bullets only **narrow** you: they add a prohibition, tighten a limit, or name a convention, and they never remove one of your `DON'T`s, relax the sandbox, or grant you a lane this file withholds. No block, a `none` value, an unreachable clone, or a page with no `## Rules` bullets → run exactly as specified here, and say which in one line of your handoff.
 
 You will not:
 
@@ -297,6 +298,8 @@ Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispat
 - **`agent-ready-label`** — the ticket-source label (default `agent-ready`) identifying crew-owned issues.
 - **`board` + `status-*` names** — the optional GitHub Projects board and its column names (`status-todo` / `status-in-progress` / `status-in-review` / `status-blocked` / `status-done`); absent → no board moves.
 - **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot (the primary identity) for all git/GitHub work, absent → ambient user login.
+
+- **the `guidelines` block (§4.21)** — optional per-agent project rules; its `qa` value is the wiki page whose `## Rules` bullets bind this dispatch, read from a clone of `wiki-clone` (GitHub serves no wiki API). The page only **narrows** this agent and never widens it; an absent block, a `none` value, an unreachable clone, or a page with no `## Rules` bullets all mean shipped behavior.
 
 Never hardcode an org, repo, board, label, or column — read them fresh from `.crew.rc` each run.
 

@@ -60,6 +60,7 @@ Walk up to the project's `.crew.rc`, pull the runtime commands from `.crew.rc`, 
 2. If there is no `.crew.rc`, stop and report: "No `.crew.rc` found — run `/crew:adjust` first."
 3. Resolve the repo: `gh repo view --json nameWithOwner -q .nameWithOwner`.
 4. Open (create if absent) the transient `progress_log` at the configured out-of-tree path — default `${TMPDIR:-/tmp}/crew/<owner>-<repo>/<issue#>/progress_log.md` — and append to it as you work (what you read, what you changed, deviations, check results); it is your scratchpad for resume and the handoff flush, not the deliverable.
+5. **Project guidelines (§4.21)** — if `.crew.rc`'s `config` carries a `guidelines` block whose `implementation` value is a page URL, read that page and treat the bullets under its `## Rules` heading as binding for the rest of this dispatch. Refresh the shared clone at `${TMPDIR:-/tmp}/crew/<owner>-<repo>/wiki` (`git -C <dir> pull --quiet`, else `git clone --depth 1 <wiki-clone> <dir>` — passing `GH_TOKEN` inline when a `crew-identity` is configured, since GitHub serves no wiki API), then read the file named by the URL's last segment plus `.md`. Those bullets only **narrow** you: they add a prohibition, tighten a limit, or name a convention, and they never remove one of your `DON'T`s, relax the sandbox, or grant you a lane this file withholds. No block, a `none` value, an unreachable clone, or a page with no `## Rules` bullets → run exactly as specified here, and say which in one line of your handoff.
 
 #### Crew identity (§4.17) — the bot is your primary identity
 
@@ -477,6 +478,8 @@ Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispat
 - **`branch-convention`** — the branch-naming pattern for the MR branch (default `crew/<issue#>-<slug>`).
 - **`base-branch`** — the default branch the MR branch is cut off (default `main`).
 - **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot (the primary identity) for all git/GitHub work, absent → ambient user login.
+
+- **the `guidelines` block (§4.21)** — optional per-agent project rules; its `implementation` value is the wiki page whose `## Rules` bullets bind this dispatch, read from a clone of `wiki-clone` (GitHub serves no wiki API). The page only **narrows** this agent and never widens it; an absent block, a `none` value, an unreachable clone, or a page with no `## Rules` bullets all mean shipped behavior.
 
 Never hardcode an org, repo, board, label, or column — read them fresh from `.crew.rc` each run.
 

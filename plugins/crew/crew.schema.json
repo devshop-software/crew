@@ -57,6 +57,27 @@
         "port": { "type": "string", "description": "The app's base port, or `none`." },
         "isolation-scheme": { "type": "string", "description": "Issue-derived port / data-namespace recipe evaluated per ticket, or `none`." },
 
+        "guidelines": {
+          "type": "object",
+          "description": "Optional per-agent project guideline pages (§4.21). Present → each dispatched agent reads the page named for its own role before it works and obeys the bullets under that page's `## Rules` heading, which may only NARROW the shipped agent (add a prohibition, tighten a limit, name a convention) and never widen it. Omit the whole object, or set a role to `none`, to run that agent on its shipped behavior alone.",
+          "additionalProperties": false,
+          "properties": {
+            "source": { "type": "string", "enum": ["wiki", "none"], "description": "Where the pages live — wiki (the repo's GitHub wiki, read from a shallow clone) or none." },
+            "wiki-clone": { "type": "string", "description": "Clone URL of the wiki repository (https://github.com/<owner>/<repo>.wiki.git). GitHub exposes no REST or GraphQL API for wiki content, so pages are read from a clone, not fetched." },
+            "gatherer": { "type": "string", "description": "Wiki page URL holding the crew:gatherer agent's project rules, or `none`." },
+            "interpreter": { "type": "string", "description": "Wiki page URL holding the crew:interpreter agent's project rules, or `none`." },
+            "planner": { "type": "string", "description": "Wiki page URL holding the crew:planner agent's project rules, or `none`." },
+            "implementation": { "type": "string", "description": "Wiki page URL holding the crew:implementation agent's project rules, or `none`." },
+            "qa": { "type": "string", "description": "Wiki page URL holding the crew:qa agent's project rules, or `none`." },
+            "reviewer": { "type": "string", "description": "Wiki page URL holding the crew:reviewer agent's project rules, or `none`." },
+            "mr-review": { "type": "string", "description": "Wiki page URL holding the crew:mr-review agent's project rules, or `none`." },
+            "ui-review": { "type": "string", "description": "Wiki page URL holding the crew:ui-review agent's project rules, or `none`." },
+            "findings": { "type": "string", "description": "Wiki page URL holding the crew:findings agent's project rules, or `none`." },
+            "pull-triage": { "type": "string", "description": "Wiki page URL holding the crew:pull-triage agent's project rules, or `none`." },
+            "merge-judge": { "type": "string", "description": "Wiki page URL holding the crew:merge-judge agent's project rules, or `none`." }
+          }
+        },
+
         "crew-identity": {
           "type": "object",
           "description": "Optional dedicated GitHub App bot identity (§4.17). Present → every component acts as the bot; omit the whole object to run as the ambient user.",

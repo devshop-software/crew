@@ -68,6 +68,7 @@ Authenticate, resolve the work, and pin the UI surfaces this ticket puts in scop
 2. Resolve the repo, the issue number (from the MR's `Closes #N`), and the MR; confirm the issue carries the configured `ui-label` (the orchestrator dispatches you only for UI tickets).
 3. Read `.crew.rc` for config and `CLAUDE.md` for project conventions.
 4. Read the **issue body** and the **diff** (`git diff <base>...HEAD`) and pin the **whole assembled route(s)** this ticket touches — the full page(s) a user lands on, not just the slice the diff changed — plus the states to drive (default, empty, error, the access-pending variant, hover/active); this whole-route scope is the checklist you measure.
+5. **Project guidelines (§4.21)** — if `.crew.rc`'s `config` carries a `guidelines` block whose `ui-review` value is a page URL, read that page and treat the bullets under its `## Rules` heading as binding for the rest of this dispatch. Refresh the shared clone at `${TMPDIR:-/tmp}/crew/<owner>-<repo>/wiki` (`git -C <dir> pull --quiet`, else `git clone --depth 1 <wiki-clone> <dir>` — passing `GH_TOKEN` inline when a `crew-identity` is configured, since GitHub serves no wiki API), then read the file named by the URL's last segment plus `.md`. Those bullets only **narrow** you: they add a prohibition, tighten a limit, or name a convention, and they never remove one of your `DON'T`s, relax the sandbox, or grant you a lane this file withholds. No block, a `none` value, an unreachable clone, or a page with no `## Rules` bullets → run exactly as specified here, and say which in one line of your handoff.
 
 #### Crew identity (§4.17) — the bot is your primary identity
 
@@ -274,6 +275,8 @@ Read `.crew.rc` (walk up from CWD to the repo root) at the start of every dispat
 - **`branch-convention`** — the branch-naming pattern, for resolving the MR branch and base (default `crew/<issue#>-<slug>`).
 - **board / label config** — `board`, `agent-ready-label`, and the `status-*` column names you reference for scope and orientation (defaults `none` / `agent-ready` / `TODO`…`Done`).
 - **the `crew-identity` block (§4.17)** — `token-helper`, `app-id`, `installation-id`, `private-key-path`, and the bot git author; present → act as the bot (the primary identity) for all git/GitHub work, absent → ambient user login.
+
+- **the `guidelines` block (§4.21)** — optional per-agent project rules; its `ui-review` value is the wiki page whose `## Rules` bullets bind this dispatch, read from a clone of `wiki-clone` (GitHub serves no wiki API). The page only **narrows** this agent and never widens it; an absent block, a `none` value, an unreachable clone, or a page with no `## Rules` bullets all mean shipped behavior.
 
 The **design MCP** itself is provisioned in `.mcp.json` at the repo root (written by `/crew:adjust`), not a `.crew.rc` key — you discover the matching design project at runtime. Never hardcode an org, repo, board, label, or tool — read them fresh from `.crew.rc` each run.
 

@@ -205,6 +205,34 @@ You will not:
 
 ---
 
+### Step 6b — Link the per-agent guideline pages (§4.21)
+
+Every project holds rules an agent cannot infer from the code — which venue a test belongs in, which conventions a review enforces, what the team already decided and refused. Find where those rules live and record one page link per agent role, so each dispatched agent reads its own rules before it works.
+
+#### Detect the guideline source
+
+1. Check whether the repo has a wiki with pages: `gh api repos/<owner>/<repo> --jq .has_wiki`, then confirm it is initialized by cloning it shallowly (`git clone --depth 1 https://github.com/<owner>/<repo>.wiki.git`) — GitHub exposes **no REST or GraphQL API for wiki content**, so a clone is the only read path and a wiki with no pages fails the clone with `Repository not found`.
+2. On a reachable wiki, record `source: wiki` and `wiki-clone` as the `.wiki.git` URL; on no wiki, an empty wiki, or a user who declines, record `source: none` and set every role to `none`.
+3. List the pages in the clone and map each of the eleven roles — `gatherer`, `interpreter`, `planner`, `implementation`, `qa`, `reviewer`, `mr-review`, `ui-review`, `findings`, `pull-triage`, `merge-judge` — to the page that holds its rules, proposing a per-role page under one section (e.g. `Agents-QA`) when the wiki has no such page yet.
+4. Where the wiki already documents a subject an agent owns (a test-strategy page, a code-review page, a design-system page), tell the user which existing page you would point that role at, so the per-role page links it instead of restating it.
+5. Record each role as the full page URL (`https://github.com/<owner>/<repo>/wiki/<Page>`), or `none` where the project has no rules for that role.
+
+#### State the contract to the user
+
+- A role's page **narrows** its agent only — it can add a prohibition, tighten a limit, or name a convention. It can never remove a shipped `DON'T`, disable the sandbox, or grant an agent a capability its own file withholds.
+- Only the bullets under the page's `## Rules` heading bind the agent; the rest of the page is context it may read.
+- A missing block, a `none` role, an unreachable clone, or a page with no `## Rules` bullets all mean the same thing: that agent runs on its shipped behavior, and says so in one line of its handoff.
+- The pages are read fresh per run from a clone under `${TMPDIR:-/tmp}/crew/<owner>-<repo>/wiki`, so an edit in the GitHub web editor reaches the next dispatch with no config change.
+
+You will not:
+
+- Write a role link the wiki does not answer — a URL that 404s costs every dispatch a failed clone read; use `none` until the page exists.
+- Copy the project's rules into `.crew.rc` — the file holds links, and the wiki holds the rules.
+- Point two roles at one shared page whose rules contradict each other's lane, e.g. giving `implementation` a page that tells it to edit the e2e tree.
+- Treat a reachable wiki as a reason to skip the user's confirmation — the role map is shown in **Step 11** like every other key.
+
+---
+
 ### Step 7 — Determine the branch convention
 
 Capture how branches are named and what they target, since each ticket gets one branch and one MR. The per-ticket worktree itself is created and owned by `/crew:run`; adjust records only the naming here, and owns the one-time bare-clone infrastructure separately in **Step 8**.
@@ -410,6 +438,24 @@ The file is JSONC (JSON with `//` comments) at the repo root, everything nested 
     "readiness-check": "none",            // health URL / port / log pattern, or none
     "port": "none",                       // e.g. 3000, or none
     "isolation-scheme": "none",           // e.g. PORT = 3000 + (issue# mod 50); COMPOSE_PROJECT_NAME = <repo>-<issue#>, or none
+    // guidelines: one wiki page per agent role (Step 6b) — each agent reads its own page and obeys the bullets
+    // under that page's `## Rules` heading. A page NARROWS its agent; it never widens one. `none` per role, or
+    // omit the whole block, to run that agent on its shipped behavior.
+    "guidelines": {
+      "source": "wiki",                   // wiki | none
+      "wiki-clone": "https://github.com/<owner>/<repo>.wiki.git",
+      "gatherer": "https://github.com/<owner>/<repo>/wiki/Agents-Gatherer",
+      "interpreter": "none",
+      "planner": "none",
+      "implementation": "https://github.com/<owner>/<repo>/wiki/Agents-Implementation",
+      "qa": "https://github.com/<owner>/<repo>/wiki/Agents-QA",
+      "reviewer": "none",
+      "mr-review": "none",
+      "ui-review": "none",
+      "findings": "none",
+      "pull-triage": "none",
+      "merge-judge": "none"
+    },
     // crew-identity: the required GitHub App bot (Step 10) — every component acts as it. Key + helper live per machine, outside any repo.
     "crew-identity": {
       "identity-mode": "github-app",
@@ -534,7 +580,7 @@ When invoked with `update`, reconcile the existing `.crew.rc` against a fresh sc
 
 ## Workflow Configuration
 
-`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `ui-label` / `instructions-label` / `planned-label` / `epic-label` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; and the required `crew-identity` block — then leaves only a MUST-READ pointer in canonical `CLAUDE.md` and a same-directory `AGENTS.md` symlink to it for Codex (Step 12). It also writes a sibling `.mcp.json` at the same root provisioning the two crew MCP servers (Playwright + design) — an onboarding artifact every agent reads directly, not a `.crew.rc` key (Step 12). On a re-run it drops any deprecated key no longer in the schema — e.g. the removed `ui-fidelity-mode` (the fidelity gate now always gates on a measured MAJOR; there is no advisory mode).
+`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `ui-label` / `instructions-label` / `planned-label` / `epic-label` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; the optional `guidelines` block mapping each agent role to the wiki page holding its project rules (Step 6b); and the required `crew-identity` block — then leaves only a MUST-READ pointer in canonical `CLAUDE.md` and a same-directory `AGENTS.md` symlink to it for Codex (Step 12). It also writes a sibling `.mcp.json` at the same root provisioning the two crew MCP servers (Playwright + design) — an onboarding artifact every agent reads directly, not a `.crew.rc` key (Step 12). On a re-run it drops any deprecated key no longer in the schema — e.g. the removed `ui-fidelity-mode` (the fidelity gate now always gates on a measured MAJOR; there is no advisory mode).
 
 `.crew.rc` is the single source every component reads instead of guessing — never hardcode an org, repo, board, label, column, or command into any crew file.
 
@@ -552,6 +598,7 @@ The hard boundaries on every run.
 - Capture the stack-run config (`start-cmd`, `readiness-check`, `port`, `isolation-scheme`) and validate it by bringing the stack up under an issue-derived isolation and tearing it down.
 - Offer the bare-clone worktree migration only with explicit consent; record `worktree-layout` either way, and preserve the old repo on migration.
 - Set up the required crew bot identity: install the token-helper + key per machine and test it (mint a token, confirm repo reach) before recording the block, stopping onboarding if the bot can't be reached.
+- Map each agent role to the wiki page holding its project rules (Step 6b), pointing a role at the page the wiki already devotes to that subject and recording `none` for a role the project has no rules for.
 - Present the config for confirmation before writing it.
 - Write a `.mcp.json` at the repo root provisioning the two crew MCP servers (Playwright + design) on every onboarding, shown in the Step 11 confirmation before it overwrites any existing file.
 - Keep `CLAUDE.md` canonical and create `AGENTS.md` only as its same-directory symlink; stop on a non-shim `AGENTS.md` conflict instead of overwriting it.
@@ -568,6 +615,7 @@ The hard boundaries on every run.
 - Duplicate guidance into `AGENTS.md`, or replace a user-authored `AGENTS.md` rather than surfacing the conflict.
 - Assume board column names — read them with `gh project field-list` and map to the real strings.
 - Write `.mcp.json` without surfacing it in the Step 11 confirmation — it replaces any existing MCP file wholesale, so the user sees it first.
+- Record a `guidelines` role link to a wiki page that does not exist, or copy the wiki's rules into `.crew.rc` — the config holds links, the wiki holds rules.
 - Skip the confirmation step, or install hooks without consent.
 
 ---
@@ -588,3 +636,5 @@ If you catch yourself thinking any of these, stop.
 - _"They gave me the App values, I'll write the `crew-identity` block."_ — STOP. Test it first — mint a token and confirm it reaches the repo; a block the helper can't use makes every component hard-stop.
 - _"The bot mint failed / this is a personal repo, I'll just run as the user."_ — STOP. The bot is crew's required identity; onboarding waits for a reachable org-owned App and key — there is no run-as-your-own-account fallback.
 - _"This is a backend/library project, it doesn't need a browser or design MCP."_ — STOP. The two crew MCP servers go into every project's `.mcp.json`; flag a missing Node/npx as a gap (Step 13) rather than skipping the file.
+- _"The wiki has pages, so I'll fetch them with `gh api repos/<owner>/<repo>/wiki`."_ — STOP. GitHub exposes no API for wiki content — that path 404s. Clone `<repo>.wiki.git`; a clone that fails with `Repository not found` means the wiki has no pages yet, so record `source: none`.
+- _"The project's test rules are important, I'll paste them into `.crew.rc` so the agents definitely get them."_ — STOP. `.crew.rc` holds one link per role. Rules pasted into config go stale the moment the wiki page changes, and nobody edits JSON to fix a rule.
