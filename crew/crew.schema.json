@@ -59,11 +59,14 @@
 
         "guidelines": {
           "type": "object",
-          "description": "Optional per-agent project guideline pages (§4.21). Present → each dispatched agent reads the page named for its own role before it works and obeys the bullets under that page's `## Rules` heading, which may only NARROW the shipped agent (add a prohibition, tighten a limit, name a convention) and never widen it. Omit the whole object, or set a role to `none`, to run that agent on its shipped behavior alone.",
+          "description": "Optional per-role project guideline pages (§4.21). Present → each dispatched agent reads the page named for its own role before it works, and each orchestrator loop reads its own page once at preflight; both obey the bullets under that page's `## Rules` heading, which may only NARROW the shipped role (add a prohibition, tighten a limit, name a convention) and never widen it. Omit the whole object, or set a role to `none`, to run that role on its shipped behavior alone.",
           "additionalProperties": false,
           "properties": {
             "source": { "type": "string", "enum": ["wiki", "none"], "description": "Where the pages live — wiki (the repo's GitHub wiki, read from a shallow clone) or none." },
             "wiki-clone": { "type": "string", "description": "Clone URL of the wiki repository (https://github.com/<owner>/<repo>.wiki.git). GitHub exposes no REST or GraphQL API for wiki content, so pages are read from a clone, not fetched." },
+            "run": { "type": "string", "description": "Wiki page URL holding the /crew:run orchestrator loop's project rules, read once at preflight and binding for the whole run, or `none`. Unlike the agent entries this binds the loop itself, which is not a dispatched agent." },
+            "pulls": { "type": "string", "description": "Wiki page URL holding the /crew:pulls orchestrator loop's project rules, read once at preflight and binding for the whole run, or `none`. Unlike the agent entries this binds the loop itself, which is not a dispatched agent." },
+            "pro": { "type": "string", "description": "Wiki page URL holding the /crew:pro orchestrator loop's project rules, read once at preflight and binding for the whole run, or `none`. Unlike the agent entries this binds the loop itself, which is not a dispatched agent." },
             "gatherer": { "type": "string", "description": "Wiki page URL holding the crew:gatherer agent's project rules, or `none`." },
             "interpreter": { "type": "string", "description": "Wiki page URL holding the crew:interpreter agent's project rules, or `none`." },
             "planner": { "type": "string", "description": "Wiki page URL holding the crew:planner agent's project rules, or `none`." },

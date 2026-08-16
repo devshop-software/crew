@@ -216,23 +216,24 @@ You will not:
 
 ---
 
-### Step 6b — Link the per-agent guideline pages (§4.21)
+### Step 6b — Link the per-role guideline pages (§4.21)
 
-Every project holds rules an agent cannot infer from the code — which venue a test belongs in, which conventions a review enforces, what the team already decided and refused. Find where those rules live and record one page link per agent role, so each dispatched agent reads its own rules before it works.
+Every project holds rules a crew role cannot infer from the code — which venue a test belongs in, which conventions a review enforces, what the team already decided and refused. Find where those rules live and record one page link per role, so each dispatched agent reads its own rules before it works and each orchestrator loop reads its own once at preflight.
 
 #### Detect the guideline source
 
 1. Check whether the repo has a wiki with pages: `gh api repos/<owner>/<repo> --jq .has_wiki`, then confirm it is initialized by cloning it shallowly (`git clone --depth 1 https://github.com/<owner>/<repo>.wiki.git`) — GitHub exposes **no REST or GraphQL API for wiki content**, so a clone is the only read path and a wiki with no pages fails the clone with `Repository not found`.
 2. On a reachable wiki, record `source: wiki` and `wiki-clone` as the `.wiki.git` URL; on no wiki, an empty wiki, or a user who declines, record `source: none` and set every role to `none`.
-3. List the pages in the clone and map each of the eleven roles — `gatherer`, `interpreter`, `planner`, `implementation`, `qa`, `reviewer`, `mr-review`, `ui-review`, `findings`, `pull-triage`, `merge-judge` — to the page that holds its rules, proposing a per-role page under one section (e.g. `Agents-QA`) when the wiki has no such page yet.
+3. List the pages in the clone and map each of the fourteen roles — the three orchestrator loops `run`, `pulls`, `pro`, then the eleven agents `gatherer`, `interpreter`, `planner`, `implementation`, `qa`, `reviewer`, `mr-review`, `ui-review`, `findings`, `pull-triage`, `merge-judge` — to the page that holds its rules, proposing a per-role page under one section (e.g. `Agents-QA`) when the wiki has no such page yet.
 4. Where the wiki already documents a subject an agent owns (a test-strategy page, a code-review page, a design-system page), tell the user which existing page you would point that role at, so the per-role page links it instead of restating it.
 5. Record each role as the full page URL (`https://github.com/<owner>/<repo>/wiki/<Page>`), or `none` where the project has no rules for that role.
 
 #### State the contract to the user
 
-- A role's page **narrows** its agent only — it can add a prohibition, tighten a limit, or name a convention. It can never remove a shipped `DON'T`, disable the sandbox, or grant an agent a capability its own file withholds.
-- Only the bullets under the page's `## Rules` heading bind the agent; the rest of the page is context it may read.
-- A missing block, a `none` role, an unreachable clone, or a page with no `## Rules` bullets all mean the same thing: that agent runs on its shipped behavior, and says so in one line of its handoff.
+- A role's page **narrows** its agent or loop only — it can add a prohibition, tighten a limit, or name a convention. It can never remove a shipped `DON'T`, drop a gate, disable the sandbox, or grant a capability the role's own file withholds.
+- Only the bullets under the page's `## Rules` heading bind the role; the rest of the page is context it may read.
+- An agent's page binds one dispatch; a loop's page (`run`, `pulls`, `pro`) is read once at that loop's preflight and binds the whole run.
+- A missing block, a `none` role, an unreachable clone, or a page with no `## Rules` bullets all mean the same thing: that role runs on its shipped behavior, and says so in one line of its handoff or Run Summary.
 - The pages are read fresh per run from a clone under `${TMPDIR:-/tmp}/crew/<owner>-<repo>/wiki`, so an edit in the GitHub web editor reaches the next dispatch with no config change.
 
 You will not:
@@ -450,12 +451,16 @@ The file is JSONC (JSON with `//` comments) at the repo root, everything nested 
     "readiness-check": "none",            // health URL / port / log pattern, or none
     "port": "none",                       // e.g. 3000, or none
     "isolation-scheme": "none",           // e.g. PORT = 3000 + (issue# mod 50); COMPOSE_PROJECT_NAME = <repo>-<issue#>, or none
-    // guidelines: one wiki page per agent role (Step 6b) — each agent reads its own page and obeys the bullets
-    // under that page's `## Rules` heading. A page NARROWS its agent; it never widens one. `none` per role, or
-    // omit the whole block, to run that agent on its shipped behavior.
+    // guidelines: one wiki page per role (Step 6b) — each role reads its own page and obeys the bullets under
+    // that page's `## Rules` heading. A page NARROWS its role; it never widens one. `none` per role, or omit
+    // the whole block, to run that role on its shipped behavior. The first three bind the orchestrator loops
+    // themselves (read once at preflight, binding for the whole run); the rest bind one agent dispatch each.
     "guidelines": {
       "source": "wiki",                   // wiki | none
       "wiki-clone": "https://github.com/<owner>/<repo>.wiki.git",
+      "run": "https://github.com/<owner>/<repo>/wiki/Agents-Run",
+      "pulls": "none",
+      "pro": "none",
       "gatherer": "https://github.com/<owner>/<repo>/wiki/Agents-Gatherer",
       "interpreter": "none",
       "planner": "none",
@@ -593,7 +598,7 @@ When invoked with `update`, reconcile the existing `.crew.rc` against a fresh sc
 
 ## Workflow Configuration
 
-`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `ui-label` / `design-handoff` / `instructions-label` / `planned-label` / `epic-label` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; the optional `guidelines` block mapping each agent role to the wiki page holding its project rules (Step 6b); and the required `crew-identity` block — then leaves only a MUST-READ pointer in canonical `CLAUDE.md` and a same-directory `AGENTS.md` symlink to it for Codex (Step 12). It also writes a sibling `.mcp.json` at the same root provisioning Playwright + design for Claude Code; Codex reads `design-handoff` from `.crew.rc` and uses its plugin-bundled Playwright server (Step 12). On a re-run it drops any deprecated key no longer in the schema — e.g. the removed `ui-fidelity-mode` (the fidelity gate now always gates on a measured MAJOR; there is no advisory mode).
+`adjust` is the **writer** of `.crew.rc` — the dedicated JSONC config file at the repo root (everything under a top-level `config` object, with a `$schema` pointer to the sibling `.crew.schema.json`) that every other crew component reads at runtime. It writes the full key set assembled and confirmed in **Step 11** — `repo`; the `test-cmd` / `lint-cmd` / `build-cmd` / `e2e-cmd` commands + `e2e-framework`; `agent-ready-label` / `ui-label` / `design-handoff` / `instructions-label` / `planned-label` / `epic-label` / `review-followup-label` / `findings-assignee` / `mr-reviewer`; `board` + the `status-*` columns; `priority-field` / `priority-field-id`; `branch-convention` / `base-branch` / `merge-method`; `worktree-layout`; the `start-cmd` / `readiness-check` / `port` / `isolation-scheme` stack-run keys; the optional `guidelines` block mapping each role — the three orchestrator loops and the eleven agents — to the wiki page holding its project rules (Step 6b); and the required `crew-identity` block — then leaves only a MUST-READ pointer in canonical `CLAUDE.md` and a same-directory `AGENTS.md` symlink to it for Codex (Step 12). It also writes a sibling `.mcp.json` at the same root provisioning Playwright + design for Claude Code; Codex reads `design-handoff` from `.crew.rc` and uses its plugin-bundled Playwright server (Step 12). On a re-run it drops any deprecated key no longer in the schema — e.g. the removed `ui-fidelity-mode` (the fidelity gate now always gates on a measured MAJOR; there is no advisory mode).
 
 `.crew.rc` is the single source every component reads instead of guessing — never hardcode an org, repo, board, label, column, or command into any crew file.
 
@@ -611,7 +616,7 @@ The hard boundaries on every run.
 - Capture the stack-run config (`start-cmd`, `readiness-check`, `port`, `isolation-scheme`) and validate it by bringing the stack up under an issue-derived isolation and tearing it down.
 - Offer the bare-clone worktree migration only with explicit consent; record `worktree-layout` either way, and preserve the old repo on migration.
 - Set up the required crew bot identity: install the token-helper + key per machine and test it (mint a token, confirm repo reach) before recording the block, stopping onboarding if the bot can't be reached.
-- Map each agent role to the wiki page holding its project rules (Step 6b), pointing a role at the page the wiki already devotes to that subject and recording `none` for a role the project has no rules for.
+- Map each role — the three orchestrator loops and the eleven agents — to the wiki page holding its project rules (Step 6b), pointing a role at the page the wiki already devotes to that subject and recording `none` for a role the project has no rules for.
 - Present the config for confirmation before writing it.
 - Validate and record the Codex `design-handoff` path, and write the Claude Code `.mcp.json` at the repo root with Playwright + design on every onboarding; show both before writing.
 - Keep `CLAUDE.md` canonical and create `AGENTS.md` only as its same-directory symlink; stop on a non-shim `AGENTS.md` conflict instead of overwriting it.
