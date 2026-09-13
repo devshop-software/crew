@@ -1,6 +1,6 @@
 {
   "name": "crew",
-  "version": "8.12.0",
+  "version": "8.13.0",
   "description": "Autonomous GitHub-issue-driven development for Codex: onboard a repository, plan instruction tickets, build and review issues through specialized subagents, and merge ready pull requests.",
   "author": {
     "name": "devshop-software"

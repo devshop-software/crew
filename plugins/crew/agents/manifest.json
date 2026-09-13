@@ -1,6 +1,6 @@
 {
   "findings": {
-    "description": "Dispatched by crew:run at ticket finalize, after crew:mr-review clears and the cleanup pass has fixed what it could in place, to harvest the advisory findings still outstanding on the MR and consolidate them into a small set of cohesive, deduped review-followup sweep tickets — each blocked by every contributing source ticket, UI-fidelity sweeps carrying the ui-label so crew:ui-review verifies them — that the loop auto-picks up once their sources merge. Hands back a count of findings filed / fixed inline / deduped / dropped plus a summary MR comment; changes no code.",
+    "description": "Dispatched by crew:run at ticket finalize, after crew:mr-review clears and the cleanup pass has fixed what it could in place, to harvest the advisory findings still outstanding on the MR and fold them into per-area review-followup sweep tickets — appending to an open sweep for the area first and opening at most one new code sweep and one new UI-fidelity sweep per MR, each blocked by every contributing source ticket, UI-fidelity sweeps carrying the ui-label so crew:ui-review verifies them — that the loop auto-picks up once their sources merge. Hands back a count of findings filed / fixed inline / deduped / dropped plus a summary MR comment; changes no code.",
     "model": "gpt-5.6-terra",
     "model_reasoning_effort": "high",
     "role_file": "./agents/findings.md"
