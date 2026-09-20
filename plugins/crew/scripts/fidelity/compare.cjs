@@ -156,12 +156,25 @@ function alignAndDiff(build, design, inScope) {
   const buildByKey = {};
   (build.elements || []).forEach((e, i) => { (buildByKey[e.key] = buildByKey[e.key] || []).push({ e, i, taken: false }); });
 
+  // A key that collapsed digit runs to `#` aligns by shape, not by value — what lets a date or a
+  // count pair across differently seeded content. It also let "33.00" in one card pair with "7.62"
+  // in another card 850px away, and report the wrong card's weight as a gating delta. So a
+  // shape-only pair (same key, different text) must also share ground: the boxes overlap, or the
+  // nearest scope identifier is the same. A candidate sharing neither is not this element.
+  function normText(t) { return String(t || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+  function sharesGround(d, e) {
+    if (iou(d.rect, e.rect) > 0) return true;
+    const dp = d.path || [], ep = e.path || [];
+    return dp.length > 0 && ep.length > 0 && dp[0] === ep[0];
+  }
   function claim(d) {
     const bucket = buildByKey[d.key];
     if (!bucket) return null;
+    const shapeOnly = /#/.test(d.key);
     let best = null, bestScore = -1;
     for (const cand of bucket) {
       if (cand.taken) continue;
+      if (shapeOnly && normText(cand.e.text) !== normText(d.text) && !sharesGround(d, cand.e)) continue;
       // role is the secondary key (dominates); bbox-IoU (0..1) only separates same-role candidates.
       const score = (cand.e.role === d.role ? 2 : 0) + iou(d.rect, cand.e.rect);
       if (score > bestScore) { bestScore = score; best = cand; }
@@ -464,6 +477,24 @@ function selftest() {
   // 17. scope matches on element text as well as the testid path (projects without testids)
   const v17 = evaluate({ build: chromeBuild, design: interOnly, designExtract: chromeDesign, scope: ['^Org switcher$'] });
   check('scope matches element text', v17.status === 'FAIL' && v17.counts.gating === 1);
+
+  // 18. a shape-only key (digit runs collapsed) does not pair two unrelated figures in two cards
+  const monoOnly = parseDesignCss(":root{--font-display:'Inter'}");
+  const dShape = { elements: [{ text: '7.62', key: '#.#', role: 'text', path: ['properties-card'], rect: { x: 1006, y: 1151, w: 384, h: 20 }, font: { primary: 'JetBrains Mono', size: 12.5, weight: 500 } }] };
+  const farFigure = { fonts: [{ family: 'Inter', status: 'loaded' }], usedFamilies: ['Inter', 'JetBrains Mono'],
+    elements: [{ text: '33.00', key: '#.#', role: 'text', path: ['stock-card'], rect: { x: 1360, y: 299, w: 39, h: 20 }, font: { primary: 'JetBrains Mono', size: 13, weight: 600 } }] };
+  const v18 = evaluate({ build: farFigure, design: monoOnly, designExtract: dShape });
+  check('shape-only key does not pair figures in unrelated cards', !v18.deltas.some(d => /^Wrong/i.test(d.title)) && v18.deltas.some(d => /Missing element/i.test(d.title)));
+  // 19. the same shape-only pair still aligns where the boxes overlap (a figure differing by value in place)
+  const nearFigure = { fonts: farFigure.fonts, usedFamilies: farFigure.usedFamilies,
+    elements: [{ text: '33.00', key: '#.#', role: 'text', path: ['stock-card'], rect: { x: 1010, y: 1151, w: 40, h: 20 }, font: { primary: 'JetBrains Mono', size: 13, weight: 600 } }] };
+  const v19 = evaluate({ build: nearFigure, design: monoOnly, designExtract: dShape });
+  check('shape-only key still pairs where the boxes overlap', v19.deltas.some(d => /^Wrong/i.test(d.title)));
+  // 20. and where the nearest scope identifier is shared, boxes apart
+  const sameScope = { fonts: farFigure.fonts, usedFamilies: farFigure.usedFamilies,
+    elements: [{ text: '33.00', key: '#.#', role: 'text', path: ['properties-card'], rect: { x: 1360, y: 299, w: 39, h: 20 }, font: { primary: 'JetBrains Mono', size: 13, weight: 600 } }] };
+  const v20 = evaluate({ build: sameScope, design: monoOnly, designExtract: dShape });
+  check('shape-only key still pairs under one scope identifier', v20.deltas.some(d => /^Wrong/i.test(d.title)));
 
   process.stdout.write(log.join('\n') + '\n' + (pass ? 'ALL PASS' : 'SELFTEST FAILED') + '\n');
   process.exit(pass ? 0 : 1);

@@ -28,7 +28,8 @@ async () => {
 
   function normKey(t) {
     // lowercase + collapse whitespace; digit-runs -> '#' so version/date/count
-    // text aligns by shape, not by volatile value.
+    // text aligns by shape, not by volatile value. compare.cjs accepts a shape-only
+    // pair only where the boxes overlap or the nearest scope id is shared.
     return String(t).toLowerCase().replace(/\s+/g, ' ').trim().replace(/\d+/g, '#');
   }
 

@@ -60,7 +60,7 @@ Walk up to the project's `.crew.rc`, pull the runtime commands from `.crew.rc`, 
 
 When `.crew.rc`'s `config` has a `crew-identity` block, the bot App token is your identity for every git and GitHub action — establish it before any other work; only a project with no block runs as the ambient user.
 
-- **Mint and use the token inline, in the same shell as each write** — `GH_TOKEN="$(<token-helper>)" gh …` (the helper reads `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and returns a cached, idempotent ~1-hour token), and push over `https://x-access-token:$GH_TOKEN@github.com/<owner>/<repo>`. Never rely on a prior step's `export`: a separate Bash call is a fresh shell, so the token is gone and `gh` silently posts as your keyring account (the #536 leak).
+- **Mint and use the token inline, in the same shell as each write** — `GH_TOKEN="$(<token-helper>)" gh …` (the helper reads `CREW_APP_ID` / `CREW_INSTALLATION_ID` / `CREW_APP_PRIVATE_KEY_PATH` from the block and returns a cached, idempotent ~1-hour token), and push with the token held in a shell variable, never written into a remote: `T="$(<token-helper>)" && git push "https://x-access-token:${T}@github.com/<owner>/<repo>" HEAD:<branch>`, then `git branch --set-upstream-to=origin/<branch>`. Never `git push -u` to a tokenised URL and never `git remote add` one — either writes the token into the repository's config (in a bare-clone layout, the shared `.bare/config` every worktree reads). Never the one-liner `GH_TOKEN="$(…)" git push "…$GH_TOKEN@…"` either: the shell expands `$GH_TOKEN` in the argument before the assignment takes effect, so it pushes an empty password. The helper needs `CREW_APP_ID`, `CREW_INSTALLATION_ID` and `CREW_APP_PRIVATE_KEY_PATH` in the *same* shell as the call, so set them inline before it, and treat an empty token as a hard-stop. Never rely on a prior step's `export`: a separate Bash call is a fresh shell, so the token is gone and `gh` silently posts as your keyring account (the #536 leak).
 - **Set the bot git author** — `git config user.name` / `user.email` to the block's bot author, in the worktree, so commits show the bot.
 - **Assert set, verify attributed** — an unset/empty `GH_TOKEN` at any write under a configured identity is a hard-stop (assert it is passed inline before the command runs); re-confirm the write was bot-attributed afterward (§4.11).
 - **Hard-stop, never fall back to the human** — if the helper can't mint, STOP and report; a configured identity the helper can't use halts the phase, it never posts as you.
@@ -203,7 +203,7 @@ The `Closes #<issue>` keyword in the **body** is the link that auto-closes the t
 
 The body is written once here; everything that satisfies an acceptance criterion must be a committed file in the diff, because MR-body prose isn't version-controlled, isn't in the diff (so `crew:mr-review` never sees it), and can't be verified without a live fetch (§4.3). A runbook or doc goes in `docs/` / a `README`, not the MR description.
 
-- If you ever must correct the body, edit it with `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -f body=@<file>` and re-fetch the live body to confirm the change landed before reporting DONE (§4.11).
+- If you ever must correct the body, edit it with `gh pr edit <n> --body-file <file>` (never `gh api … -f body=@<file>`: `-f` sends the literal string `@<file>`, and only `-F` reads the file) and re-fetch the live body to confirm the change landed before reporting DONE (§4.11).
 
 You will not:
 
